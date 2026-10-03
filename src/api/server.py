@@ -1,423 +1,318 @@
-"""
-RoadFit-X: API Server (Refactored)
-------------------------------------
-Wires the refactored routing engine, Poisson survival model, and
-catastrophic CVaR into the FastAPI endpoint.
-
-FIXES applied:
-  - Handles new router return type: (path_nodes, path_edges, stats)
-  - Uses exact edge keys from path_edges for geometry extraction
-    (no more MultiDiGraph edge collapse in coordinate extraction)
-  - Completion probability comes from the Poisson survival model
-  - CVaR reports catastrophic tail-risk, not just travel-time variance
-"""
-import sys
+"""Local RoadFit research API. Routes and simulated estimates carry evidence labels."""
 import os
 import math
+import threading
+import uuid
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+from typing import Literal
+
 import numpy as np
-from scipy.spatial import KDTree
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-from typing import Optional, List, Tuple, Dict, Any
-import uvicorn
 import osmnx as ox
 import shapely.wkt
+from scipy.spatial import KDTree
+from fastapi import FastAPI, HTTPException, Query, Depends
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
+import uvicorn
 
-# Ensure src modules can be imported
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.routing.risk_aware_router import route_risk_aware, RoutingSearchLimit, haversine_admissible_heuristic
+from src.routing.cvar_optimizer import optimize_cvar_route, compute_catastrophic_cvar
+from src.vehicle.vehicle_digital_twin import VehicleDigitalTwin
+from src.evaluation.baseline_routes import route_baseline
+from src.evaluation.metrics_engine import MetricsEngine
+from src.data.provenance_store import ProvenanceStore
+from src.brain.cognitive_core import CognitiveCore
+from src.api.officer_auth import require_officer
+from src.api.traffic_api import install_traffic_api
+from src.routing.anticipatory import ArrivalRouter
+from src.vehicle.profiles import make_vehicle, legal_access
+from src.vehicle.geometry_constraints import highway_category
 
-from routing.risk_aware_router import route_risk_aware
-from routing.cvar_optimizer import optimize_cvar_route
-from models.scenario_generator import generate_scenarios
-from vehicle.vehicle_digital_twin import VehicleDigitalTwin
-from data.provenance_store import ProvenanceStore
-from brain.cognitive_core import CognitiveCore
-
-def _build_kd_tree(graph):
-    nodes_data = list(graph.nodes(data=True))
-    coords = np.array([[d['y'], d['x']] for _, d in nodes_data])
-    node_ids = np.array([n for n, _ in nodes_data])
-    return KDTree(coords), node_ids
-
-
-app = FastAPI(title="RoadFit-X API", version="3.0")
-
+ROOT = Path(__file__).resolve().parents[2]
+app = FastAPI(title='RoadFit-X Research API', version='4.0')
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Global state
-MASTER_GRAPH = None
-KD_TREE = None
-NODE_IDS = None
+    allow_origins=os.environ.get('ROADFIT_CORS_ORIGINS', 'http://localhost:5173,http://127.0.0.1:5173').split(','),
+    allow_credentials=False, allow_methods=['GET', 'POST'], allow_headers=['Content-Type', 'Authorization'])
+MASTER_GRAPH = KD_TREE = NODE_IDS = None
 PROVENANCE = ProvenanceStore()
-BRAIN = CognitiveCore()
+BRAIN = CognitiveCore(db_path=str(ROOT / 'brain_memory.db'),
+                      model_path=os.environ.get('ROADFIT_SEMANTIC_MODEL'))
+JOBS = {}
+JOB_LOCK = threading.Lock()
+WORKERS = ThreadPoolExecutor(max_workers=1, thread_name_prefix='roadfit-job')
+ARRIVAL_ROUTER = None
 
-print("Loading enriched master graph into memory for API...")
+def _build_kd_tree(graph):
+    nodes = list(graph.nodes(data=True))
+    return KDTree(np.array([[float(d['y']), float(d['x'])] for _, d in nodes])), [n for n, _ in nodes]
+
 try:
-    MASTER_GRAPH = ox.load_graphml("data/koramangala_enriched_v2.graphml")
-    print("Graph loaded successfully.")
+    expanded = ROOT / 'data/public/bengaluru_drive.graphml'
+    default_graph = expanded if expanded.exists() else ROOT / 'data/koramangala_enriched_v2.graphml'
+    graph_file = Path(os.environ.get('ROADFIT_GRAPH', str(default_graph)))
+    MASTER_GRAPH = ox.load_graphml(graph_file)
+    if 'constraint_basis' not in MASTER_GRAPH.graph:
+        MASTER_GRAPH.graph['constraint_basis'] = 'legacy_synthetic_unvalidated'
+        # The old enrichment overwrote observed widths without retaining provenance.
+        for _, _, _, data in MASTER_GRAPH.edges(keys=True, data=True):
+            if 'width' in data:
+                data['width_source'] = 'legacy_synthetic_unvalidated'
     KD_TREE, NODE_IDS = _build_kd_tree(MASTER_GRAPH)
-    print(f"KD-Tree built with {len(NODE_IDS)} nodes.")
-except Exception as e:
-    print(f"Warning: Could not load master graph. {e}")
-    MASTER_GRAPH = None
-
+except (OSError, ValueError) as error:
+    print(f'Map unavailable: {error}')
 
 class CoordinateRequest(BaseModel):
-    orig_lat: float
-    orig_lon: float
-    dest_lat: float
-    dest_lon: float
-    vehicle_width: float = 2.0
-    vehicle_height: float = 2.0
-    vehicle_weight: float = 2.0
-    unknown_data_policy: str = "exploratory"
+    vehicle_class: Literal['custom', 'bicycle', 'motorcycle', 'hatchback', 'suv', 'van', 'truck'] = 'custom'
+    orig_lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    orig_lon: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    dest_lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    dest_lon: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    vehicle_width: float = Field(default=2., gt=0, le=6., allow_inf_nan=False)
+    vehicle_height: float = Field(default=2., gt=0, le=8., allow_inf_nan=False)
+    vehicle_weight: float = Field(default=2., gt=0, le=100., allow_inf_nan=False)
+    unknown_data_policy: Literal['strict', 'conservative', 'exploratory'] = 'conservative'
     simulate_congestion: bool = False
-    rain_level: str = "none"      # none, light, moderate, heavy, extreme
-    traffic_level: str = "normal"  # low, normal, heavy, gridlock
-
-
-@app.get("/")
-def read_root():
-    return {"message": "RoadFit-X World Model API v3.0 is online"}
-
-@app.post("/brain/train")
-def train_brain(iterations: int = 1000):
-    if MASTER_GRAPH is None:
-        raise HTTPException(status_code=500, detail="Master graph not loaded.")
-    
-    import threading
-    # Run in background to avoid blocking FastAPI
-    def _train():
-        BRAIN.train_brain(MASTER_GRAPH, iterations)
-    
-    thread = threading.Thread(target=_train)
-    thread.start()
-    return {"message": f"Brain training initiated with {iterations} simulated scenarios in the background."}
+    rain_level: Literal['none', 'light', 'moderate', 'heavy', 'extreme'] = 'none'
+    traffic_level: Literal['low', 'normal', 'heavy', 'gridlock'] = 'normal'
 
 class RoadblockRequest(BaseModel):
-    lat: float
-    lon: float
-    severity: float = 1.0
+    lat: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    lon: float = Field(ge=-180, le=180, allow_inf_nan=False)
+    severity: float = Field(default=1., ge=0, le=1, allow_inf_nan=False)
 
-@app.post("/brain/consolidate")
+@app.get('/')
+def read_root():
+    return {'message': 'RoadFit-X Research API v4.0 is online'}
+
+@app.get('/health')
+def health():
+    return {'status': 'ok' if MASTER_GRAPH is not None else 'map_unavailable',
+            'nodes': MASTER_GRAPH.number_of_nodes() if MASTER_GRAPH is not None else 0,
+            'edges': MASTER_GRAPH.number_of_edges() if MASTER_GRAPH is not None else 0,
+            'constraint_basis': MASTER_GRAPH.graph.get('constraint_basis') if MASTER_GRAPH is not None else None}
+
+def _submit_job(function):
+    with JOB_LOCK:
+        if any(j['status'] in ('queued', 'running') for j in JOBS.values()):
+            raise HTTPException(409, 'A training job is already active.')
+        job_id = uuid.uuid4().hex
+        JOBS[job_id] = {'status': 'queued', 'message': 'Queued'}
+    def run():
+        with JOB_LOCK:
+            JOBS[job_id] = {'status': 'running', 'message': 'Running simulated training'}
+        try:
+            result = function()
+        except Exception as error:
+            with JOB_LOCK:
+                JOBS[job_id] = {'status': 'failed', 'message': str(error)}
+        else:
+            with JOB_LOCK:
+                JOBS[job_id] = {'status': 'complete', 'message': 'Simulated training completed', 'result': result}
+    WORKERS.submit(run)
+    return {'job_id': job_id, 'message': 'Simulated training queued; follow the job status.'}
+
+class TrainingRequest(BaseModel):
+    vehicle_class: Literal['custom', 'bicycle', 'motorcycle', 'hatchback', 'suv', 'van', 'truck'] = 'custom'
+    vehicle_width: float = Field(default=2.4, gt=0, le=6., allow_inf_nan=False)
+    vehicle_height: float = Field(default=2.8, gt=0, le=8., allow_inf_nan=False)
+    vehicle_weight: float = Field(default=5., gt=0, le=100., allow_inf_nan=False)
+
+def _vehicle_profile(request, policy='conservative'):
+    if request.vehicle_class != 'custom':
+        return make_vehicle(request.vehicle_class, policy,
+                            request.vehicle_width if 'vehicle_width' in request.model_fields_set else None,
+                            request.vehicle_height if 'vehicle_height' in request.model_fields_set else None,
+                            request.vehicle_weight if 'vehicle_weight' in request.model_fields_set else None)
+    return VehicleDigitalTwin(
+        vehicle_type=f'custom_{request.vehicle_width:g}_{request.vehicle_height:g}_{request.vehicle_weight:g}',
+        width_m=request.vehicle_width, height_m=request.vehicle_height,
+        gross_weight_t=request.vehicle_weight, axle_load_t=request.vehicle_weight/2.,
+        wheelbase_m=3., turning_radius_m=6., ground_clearance_m=.2, max_grade_pct=15.,
+        surface_tolerance=['asphalt', 'concrete', 'paved', 'compacted'],
+        rain_tolerance='medium', risk_preference='moderate', unknown_data_policy=policy)
+
+@app.post('/brain/train')
+def train_brain(request: TrainingRequest | None = None,
+                iterations: int = Query(default=1000, ge=1, le=100000)):
+    if MASTER_GRAPH is None:
+        raise HTTPException(503, 'Master graph not loaded.')
+    vehicle = _vehicle_profile(request or TrainingRequest(), policy='exploratory')
+    return _submit_job(lambda: BRAIN.train_brain(MASTER_GRAPH, iterations, vehicle=vehicle))
+
+@app.post('/brain/consolidate')
 def consolidate_semantic_memory():
     if MASTER_GRAPH is None:
-        raise HTTPException(status_code=500, detail="Master graph not loaded.")
-    
-    import threading
-    def _consolidate():
-        BRAIN.semantic.consolidate(BRAIN.episodic.db_path, MASTER_GRAPH)
-    
-    thread = threading.Thread(target=_consolidate)
-    thread.start()
-    return {"message": "Semantic Memory Consolidation (Deep Sleep ML Training) started in background."}
+        raise HTTPException(503, 'Master graph not loaded.')
+    return _submit_job(lambda: BRAIN.semantic.consolidate(BRAIN.episodic.db_path, MASTER_GRAPH))
 
-@app.post("/brain/roadblock")
-def report_live_roadblock(request: RoadblockRequest):
+@app.get('/brain/jobs/{job_id}')
+def get_job(job_id: str):
+    with JOB_LOCK:
+        if job_id not in JOBS:
+            raise HTTPException(404, 'Unknown job')
+        return {'job_id': job_id, **JOBS[job_id]}
+
+def _snap(graph, tree, ids, lat, lon):
+    _, index = tree.query([lat, lon])
+    node = ids[int(index)]
+    data = graph.nodes[node]
+    distance = haversine_admissible_heuristic(lat, lon, float(data['y']), float(data['x']), 1.)
+    if distance > 1000:
+        raise HTTPException(422, 'Point is outside map coverage (nearest road is over 1 km away).')
+    return node
+
+@app.post('/brain/roadblock')
+def report_live_roadblock(request: RoadblockRequest, _=Depends(require_officer)):
     if KD_TREE is None:
-        raise HTTPException(status_code=500, detail="Map not loaded.")
-    
-    # Find nearest intersection (node)
-    _, ni = KD_TREE.query([request.lat, request.lon])
-    nearest_node = int(NODE_IDS[ni])
-    
-    blocked_edges = 0
-    # Block all outgoing edges from this intersection in working memory
-    for u, v, k, data in MASTER_GRAPH.out_edges(nearest_node, keys=True, data=True):
-        edge_id = f"{u}_{v}_{k}"
-        BRAIN.working.report_live_hazard(edge_id, request.severity, ttl_seconds=900) # 15 mins
-        blocked_edges += 1
-        
-    return {"message": f"🚨 Working Memory: Blocked {blocked_edges} edges around intersection for 15 minutes."}
+        raise HTTPException(503, 'Map not loaded.')
+    node = _snap(MASTER_GRAPH, KD_TREE, NODE_IDS, request.lat, request.lon)
+    edges = list(MASTER_GRAPH.out_edges(node, keys=True))
+    for u, v, key in edges:
+        BRAIN.working.report_live_hazard(f'{u}_{v}_{key}', request.severity, ttl_seconds=900)
+    return {'message': f'Reported hazard on {len(edges)} outgoing edges for 15 minutes.'}
 
-def _extract_route_coords_from_edges(
-    graph,
-    path_nodes: List[int],
-    path_edges: List[Tuple[int, int, Any, Dict[str, Any]]],
-) -> List[List[float]]:
-    """Extract [lon, lat] coordinates using exact edge keys from path_edges.
-
-    This avoids the old MultiDiGraph collapse bug: we use the precise edge
-    key that was selected by the router, not an arbitrary parallel edge.
-    """
+def _extract_route_coords_from_edges(graph, path_nodes, path_edges):
     coords = []
-    for u, v, key, data in path_edges:
-        geom = data.get('geometry')
-        if geom is not None:
+    for u, v, _, data in path_edges:
+        geometry = data.get('geometry')
+        points = []
+        if geometry is not None:
             try:
-                if isinstance(geom, str):
-                    geom = shapely.wkt.loads(geom)
-                if hasattr(geom, 'coords'):
-                    for lon, lat in geom.coords:
-                        coords.append([lon, lat])
-                    continue
-            except Exception:
-                pass
-        # Fallback to node coordinates
-        u_data = graph.nodes[u]
-        coords.append([float(u_data['x']), float(u_data['y'])])
-
-    # Always append destination
-    last_node = path_nodes[-1]
-    last = graph.nodes[last_node]
-    coords.append([float(last['x']), float(last['y'])])
+                geometry = shapely.wkt.loads(geometry) if isinstance(geometry, str) else geometry
+                points = [[float(x), float(y)] for x, y in geometry.coords]
+                start = graph.nodes[u]
+                if points and ((points[-1][0]-start['x'])**2+(points[-1][1]-start['y'])**2
+                               < (points[0][0]-start['x'])**2+(points[0][1]-start['y'])**2):
+                    points.reverse()
+            except (ValueError, AttributeError):
+                points = []
+        if not points:
+            points = [[float(graph.nodes[n]['x']), float(graph.nodes[n]['y'])] for n in (u, v)]
+        for point in points:
+            if not coords or point != coords[-1]:
+                coords.append(point)
     return coords
 
+def _active_map(request):
+    if MASTER_GRAPH is None:
+        raise HTTPException(503, 'Master graph not loaded.')
+    try:
+        origin = _snap(MASTER_GRAPH, KD_TREE, NODE_IDS, request.orig_lat, request.orig_lon)
+        dest = _snap(MASTER_GRAPH, KD_TREE, NODE_IDS, request.dest_lat, request.dest_lon)
+        return MASTER_GRAPH, origin, dest
+    except HTTPException:
+        if os.environ.get('ROADFIT_ALLOW_DOWNLOAD') != '1':
+            raise
+    distance = haversine_admissible_heuristic(request.orig_lat, request.orig_lon, request.dest_lat, request.dest_lon, 1.)
+    if distance > 50_000:
+        raise HTTPException(422, 'Dynamic map downloads are limited to trips within 50 km.')
+    ox.settings.requests_timeout = 30
+    padding = .015
+    try:
+        graph = ox.graph_from_bbox(
+            bbox=(min(request.orig_lon, request.dest_lon)-padding,
+                  min(request.orig_lat, request.dest_lat)-padding,
+                  max(request.orig_lon, request.dest_lon)+padding,
+                  max(request.orig_lat, request.dest_lat)+padding), network_type='drive')
+        graph.graph['constraint_basis'] = 'osm_unvalidated'
+        tree, ids = _build_kd_tree(graph)
+        return graph, _snap(graph, tree, ids, request.orig_lat, request.orig_lon), _snap(graph, tree, ids, request.dest_lat, request.dest_lon)
+    except HTTPException:
+        raise
+    except Exception as error:
+        raise HTTPException(503, 'Could not fetch map data.') from error
 
-@app.post("/route/plan")
+@app.post('/route/plan')
 def route_plan(request: CoordinateRequest):
-    # Determine active graph: dynamic download if outside Koramangala bounds
-    distance_to_center = (
-        (request.orig_lat - 12.9352)**2 + (request.orig_lon - 77.6245)**2
-    )**0.5
-
-    if distance_to_center > 0.05:
-        # Prevent massive inter-city requests from hanging the OSM Overpass API
-        # Haversine approximation in degrees (1 deg ~ 111km)
-        trip_distance_deg = ((request.orig_lat - request.dest_lat)**2 + (request.orig_lon - request.dest_lon)**2)**0.5
-        if trip_distance_deg > 0.5: # ~50km
-            raise HTTPException(
-                status_code=400,
-                detail="Trip too long for dynamic graph generation. Please select points within 50km of each other."
-            )
-            
-        print("Coordinates outside Koramangala. Dynamically fetching OSM graph...")
-        try:
-            padding = 0.015  # ~1.5km padding
-            north = max(request.orig_lat, request.dest_lat) + padding
-            south = min(request.orig_lat, request.dest_lat) - padding
-            east = max(request.orig_lon, request.dest_lon) + padding
-            west = min(request.orig_lon, request.dest_lon) - padding
-
-            active_graph = ox.graph_from_bbox(
-                bbox=(west, south, east, north),
-                network_type='drive'
-            )
-            temp_kd, temp_ids = _build_kd_tree(active_graph)
-
-            _, oi = temp_kd.query([request.orig_lat, request.orig_lon])
-            _, di = temp_kd.query([request.dest_lat, request.dest_lon])
-            orig_node = int(temp_ids[oi])
-            dest_node = int(temp_ids[di])
-            print(f"Dynamic graph loaded: {active_graph.number_of_nodes()} nodes")
-        except Exception as e:
-            print(f"Dynamic graph fetch failed: {e}")
-            raise HTTPException(
-                status_code=500, detail=f"Could not fetch map data: {e}"
-            )
-    else:
-        if MASTER_GRAPH is None:
-            raise HTTPException(
-                status_code=500, detail="Master graph not loaded."
-            )
-        _, oi = KD_TREE.query([request.orig_lat, request.orig_lon])
-        _, di = KD_TREE.query([request.dest_lat, request.dest_lon])
-        orig_node = int(NODE_IDS[oi])
-        dest_node = int(NODE_IDS[di])
-        active_graph = MASTER_GRAPH
-
-    if orig_node == dest_node:
-        raise HTTPException(
-            status_code=400,
-            detail="Origin and destination resolve to the same node. "
-                   "Please move them further apart."
-        )
-
-    vehicle = VehicleDigitalTwin(
-        vehicle_type="custom",
-        width_m=request.vehicle_width,
-        height_m=request.vehicle_height,
-        gross_weight_t=request.vehicle_weight,
-        axle_load_t=request.vehicle_weight / 2.0,
-        wheelbase_m=3.0,
-        turning_radius_m=6.0,
-        ground_clearance_m=0.2,
-        max_grade_pct=15.0,
-        surface_tolerance=["asphalt", "concrete", "paved", "compacted"],
-        rain_tolerance="medium",
-        cargo_class="standard",
-        risk_preference="moderate",
-        unknown_data_policy=request.unknown_data_policy
-    )
-
-    rain = request.rain_level
-    traffic = request.traffic_level
-
-    # ── Baseline B0 Route for Trade-off Comparison ──
-    from evaluation.baseline_routes import route_shortest_eta
-    from evaluation.metrics_engine import MetricsEngine
-    from routing.risk_aware_router import _compute_path_stats
-    
-    b0_nodes = route_shortest_eta(active_graph, orig_node, dest_node)
-    b0_edges = []
-    b0_coords = []
-    b0_time = 0.0
-    
-    if b0_nodes and len(b0_nodes) >= 2:
-        for i in range(len(b0_nodes)-1):
-            u = b0_nodes[i]
-            v = b0_nodes[i+1]
-            edge_data = active_graph.get_edge_data(u, v)
-            if edge_data:
-                key = list(edge_data.keys())[0]
-                b0_edges.append((u, v, key, edge_data[key]))
-        
-        b0_coords = _extract_route_coords_from_edges(active_graph, b0_nodes, b0_edges)
-        
-        # Calculate B0 baseline physical time
-        for _, _, _, data in b0_edges:
-            length_m = float(data.get('length', 10.0))
-            speed_raw = data.get('speed_kph', data.get('maxspeed', 25.0))
-            if isinstance(speed_raw, list):
-                speed_raw = speed_raw[0]
-            try:
-                speed_kph = float(speed_raw)
-            except (ValueError, TypeError):
-                speed_kph = 25.0
-            speed_mps = max(speed_kph * (1000.0 / 3600.0), 1.0)
-            b0_time += (length_m / speed_mps)
-
-    # ── Route using the refactored engine ──
-    if request.simulate_congestion:
-        print(f"CVaR mode: rain={rain}, traffic={traffic}")
-        scenarios = generate_scenarios(active_graph, num_scenarios=5)
-        rf_nodes, rf_edges, rf_stats = optimize_cvar_route(
-            base_graph=active_graph,
-            scenarios=scenarios,
-            orig_node=orig_node,
-            dest_node=dest_node,
-            vehicle=vehicle,
-            provenance=PROVENANCE,
-            rain_level=rain,
-            traffic_level=traffic,
-        )
-    else:
-        print(f"Ensemble A* mode: rain={rain}, traffic={traffic}, policy={request.unknown_data_policy}")
-        
-        # Mechanism 1: Pure Heuristics (No Memory)
-        h_nodes, h_edges, h_stats = route_risk_aware(
-            G=active_graph, orig_node=orig_node, dest_node=dest_node,
-            vehicle=vehicle, provenance=PROVENANCE, rain_level=rain, traffic_level=traffic
-        )
-        
-        # Mechanism 2: Cognitive Bias (Episodic Memory)
-        biased_graph = BRAIN.apply_cognitive_bias(active_graph, rain, traffic, vehicle.vehicle_type)
-        b_nodes, b_edges, b_stats = route_risk_aware(
-            G=biased_graph, orig_node=orig_node, dest_node=dest_node,
-            vehicle=vehicle, provenance=PROVENANCE, rain_level=rain, traffic_level=traffic
-        )
-        
-        # Ensemble Selection Logic:
-        # Compare expected travel time adjusted by survival probability (ETA / P_survival)
-        # Lower is better.
-        def _score(stats):
-            if not stats: return float('inf')
-            p = stats.get('completion_probability', 0.001)
-            eta = stats.get('eta_seconds', 999999)
-            return eta / max(p, 0.001)
-
-        score_h = _score(h_stats)
-        score_b = _score(b_stats)
-
-        ensemble_winner = ""
-        if b_nodes and score_b <= score_h:
-            rf_nodes, rf_edges, rf_stats = b_nodes, b_edges, b_stats
-            ensemble_winner = "Cognitive Core (Brain Memory)"
-        elif h_nodes:
-            rf_nodes, rf_edges, rf_stats = h_nodes, h_edges, h_stats
-            ensemble_winner = "Pure Physics Heuristics"
+    graph, origin, dest = _active_map(request)
+    if origin == dest:
+        raise HTTPException(400, 'Origin and destination resolve to the same node.')
+    vehicle = _vehicle_profile(request, request.unknown_data_policy)
+    rain, traffic = request.rain_level, request.traffic_level
+    b0_nodes, b0_edges, b0_stats = route_baseline(graph, origin, dest, vehicle, rain_level=rain, traffic_level=traffic)
+    # All selection methods respect live roadblocks and memory. An unbiased route
+    # cannot defeat a roadblock merely by receiving a shorter travel-time score.
+    biased = BRAIN.apply_cognitive_bias(graph, rain, traffic, vehicle.vehicle_type)
+    if request.vehicle_class != 'custom':
+        tree, ids = (KD_TREE, NODE_IDS) if graph is MASTER_GRAPH else _build_kd_tree(graph)
+        terminal_nodes = {origin, dest}
+        for node in (origin, dest):
+            point = graph.nodes[node]
+            radius = 350/(111320*math.cos(math.radians(float(point['y']))))
+            terminal_nodes.update(ids[i] for i in tree.query_ball_point([point['y'], point['x']], radius))
+        remove = []
+        for u, v, key, data in biased.edges(keys=True, data=True):
+            terminal = u in terminal_nodes or v in terminal_nodes
+            if (not legal_access(data, request.vehicle_class, terminal) or
+                    (request.vehicle_class == 'truck' and highway_category(data) in {'residential', 'service', 'living_street'} and not terminal)):
+                remove.append((u, v, key))
+        biased.remove_edges_from(remove)
+    try:
+        if request.simulate_congestion:
+            nodes, edges, stats = optimize_cvar_route(biased, [], origin, dest, vehicle,
+                                                      PROVENANCE, rain_level=rain, traffic_level=traffic)
+            method = 'CVaR over feasible search candidates'
         else:
-            rf_nodes, rf_edges, rf_stats = None, None, None
-
-    if rf_nodes is None or rf_edges is None or len(rf_nodes) < 2:
-        raise HTTPException(
-            status_code=404,
-            detail=f"No viable route found under '{request.unknown_data_policy}' policy. Try a more relaxed policy.",
-        )
-
-    # ── Geometry extraction using exact edge keys ──
-    coords = _extract_route_coords_from_edges(active_graph, rf_nodes, rf_edges)
-
+            nodes, edges, stats = route_risk_aware(biased, origin, dest, vehicle, PROVENANCE, rain, traffic)
+            method = 'Resource-constrained search with memory'
+    except RoutingSearchLimit as error:
+        raise HTTPException(503, str(error)) from error
+    if nodes is None:
+        raise HTTPException(404, f"No route satisfies the modeled constraints under '{request.unknown_data_policy}' policy.")
+    coords = _extract_route_coords_from_edges(graph, nodes, edges)
     if len(coords) < 2:
-        raise HTTPException(
-            status_code=500,
-            detail="Route found but geometry extraction failed.",
-        )
-
-    # Calculate true physical time for RoadFit-X to ensure accurate ETTP
-    rf_time = 0.0
-    for _, _, _, data in rf_edges:
-        length_m = float(data.get('length', 10.0))
-        speed_raw = data.get('speed_kph', data.get('maxspeed', 25.0))
-        if isinstance(speed_raw, list):
-            speed_raw = speed_raw[0]
-        try:
-            speed_kph = float(speed_raw)
-        except (ValueError, TypeError):
-            speed_kph = 25.0
-        speed_mps = max(speed_kph * (1000.0 / 3600.0), 1.0)
-        rf_time += (length_m / speed_mps)
-        
-    if b0_time <= 0:
-        b0_time = rf_time
-
-    # Evaluate Academic Metrics
-    metrics_engine = MetricsEngine(vehicle)
-    academic_metrics = metrics_engine.evaluate_route(
-        G=active_graph, 
-        path_nodes=rf_nodes, 
-        path_edges=rf_edges, 
-        median_eta=rf_time, 
-        baseline_b0_time=b0_time
-    )
-
-    # Counterfactual explanations
-    from routing.counterfactual_router import generate_route_explanation
-    explanations = generate_route_explanation(rf_stats, rf_nodes)
-
-    dist_km = rf_stats.get('distance_m', 0) / 1000.0
-
+        raise HTTPException(500, 'Route geometry could not be extracted.')
+    risk = compute_catastrophic_cvar(edges, vehicle, PROVENANCE, rain, traffic, seed=0)
+    metrics = MetricsEngine(vehicle).evaluate_route(graph, nodes, edges, stats['travel_time_s'],
+                                                   b0_stats.get('travel_time_s', 0.),
+                                                   rain_level=rain, traffic_level=traffic, seed=0)
+    warnings = [
+        'Research estimates: survival and tail loss are from an uncalibrated engineering model.',
+        f"Road constraint evidence: {graph.graph.get('constraint_basis', 'unvalidated')}.",
+    ]
+    if metrics['ConstraintCoverage_%'] < 100:
+        warnings.append('Some physical limits are unknown. Feasibility depends on the selected category priors.')
     return {
-        "selected_route": {
-            "geometry": {
-                "type": "LineString",
-                "coordinates": coords,
-            },
-            "eta_p50_min": round(rf_time / 60.0, 1),
-            "eta_p90_min": round((rf_time / 60.0) * 1.3, 1),
-            "completion_probability": round(
-                rf_stats.get('completion_probability', 0.9), 4
-            ),
-            "cvar_risk": round(rf_stats.get('cvar_risk', rf_time * 0.2), 1),
-            "distance_km": round(dist_km, 2),
-            "avg_speed_kmh": round(rf_stats.get('avg_speed_kmh', 25.0), 1),
-            "rain_level": rain,
-            "traffic_level": traffic,
-            "ensemble_winner": ensemble_winner if not request.simulate_congestion else "CVaR Optimiser",
-            "academic_metrics": academic_metrics
+        'selected_route': {
+            'geometry': {'type': 'LineString', 'coordinates': coords},
+            'eta_nominal_min': round(stats['travel_time_s']/60., 2),
+            'eta_p50_min': round(risk['eta_p50_sec']/60., 2),
+            'eta_p90_min': round(risk['eta_p90_sec']/60., 2),
+            'completion_probability': round(stats['completion_probability'], 6),
+            'probability_basis': stats['probability_basis'],
+            'cvar_risk': round(risk['cvar_90_sec'], 2),
+            'cvar_unit': 'seconds_of_generalized_loss',
+            'distance_km': round(stats['distance_m']/1000., 3),
+            'avg_speed_kmh': round(stats['avg_speed_kmh'], 2),
+            'rain_level': rain, 'traffic_level': traffic,
+            'ensemble_winner': method, 'academic_metrics': metrics,
+            'search': stats['search'], 'simulation': risk,
         },
-        "baseline_route": {
-            "geometry": {
-                "type": "LineString",
-                "coordinates": b0_coords,
-            },
-            "eta_p50_min": round(b0_time / 60.0, 1)
-        },
-        "warnings": (
-            explanations
-            if explanations
-            else [f"Route optimised. {len(rf_nodes)} nodes traversed."]
-        )
+        'baseline_route': {
+            'geometry': {'type': 'LineString', 'coordinates': _extract_route_coords_from_edges(graph, b0_nodes, b0_edges)},
+            'eta_p50_min': round(b0_stats['travel_time_s']/60., 2),
+        } if b0_nodes else None,
+        'warnings': warnings,
     }
 
+def _arrival_router(graph):
+    global ARRIVAL_ROUTER
+    if ARRIVAL_ROUTER is None or ARRIVAL_ROUTER.graph is not graph:
+        ARRIVAL_ROUTER = ArrivalRouter(graph)
+    return ARRIVAL_ROUTER
 
-if __name__ == "__main__":
-    print("Starting RoadFit-X API Server...")
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+def _blocked_edges(graph):
+    return frozenset((u, v, k) for u, v, k in graph.edges(keys=True)
+                     if BRAIN.working.get_live_penalty(f'{u}_{v}_{k}') >= 1.)
+
+
+install_traffic_api(app, _arrival_router, lambda: MASTER_GRAPH,
+                    lambda lat, lon: _snap(MASTER_GRAPH, KD_TREE, NODE_IDS, lat, lon),
+                    _extract_route_coords_from_edges, _blocked_edges,
+                    lambda edge, ttl: BRAIN.working.report_live_hazard('_'.join(map(str, edge)), 1., ttl))
+
+if __name__ == '__main__':
+    uvicorn.run(app, host='127.0.0.1', port=8000)

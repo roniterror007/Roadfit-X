@@ -1,144 +1,49 @@
-"""
-RoadFit-X: Hard Constraint Router (Fixed)
--------------------------------------------
-Baseline A* router using hard physics constraints.
-
-FIXES applied:
-  - Heuristic uses Haversine great-circle distance (not Euclidean on lat/lon
-    degrees), divided by max network speed for admissibility.
-  - MultiDiGraph edge selection evaluates all parallel keys and picks the
-    best viable one for the vehicle, instead of blindly taking min-length.
-"""
-import networkx as nx
-import osmnx as ox
+"""Compatibility CLI for the hard-constraint time baseline."""
 import argparse
-import time
+import math
+import osmnx as ox
+from src.evaluation.baseline_routes import route_baseline
+from src.vehicle.geometry_constraints import _parse_osm_float
+from src.routing.risk_aware_router import _physics_travel_time
 
-from src.routing.risk_aware_router import haversine_admissible_heuristic
-
-
-def get_edge_data(G, u, v, vehicle_width=2.0, vehicle_height=2.0):
-    """Return the most relevant edge payload for a node pair.
-
-    For MultiDiGraphs, evaluates ALL parallel edge keys and returns the one
-    with the lowest travel time that still satisfies vehicle hard constraints.
-    Falls back to the shortest-length edge if no travel_time is available.
-    """
-    edge_data = G.get_edge_data(u, v)
-    if edge_data is None:
+def get_edge_data(G, u, v, vehicle_width=2., vehicle_height=2., vehicle_weight=2.):
+    edges = G.get_edge_data(u, v)
+    if not edges:
         return {}
+    candidates = edges.values() if G.is_multigraph() else [edges]
+    viable = [d for d in candidates if (
+        _parse_osm_float(d.get('width'), 6.5) >= vehicle_width and
+        _parse_osm_float(d.get('maxheight'), 4.5) >= vehicle_height and
+        _parse_osm_float(d.get('maxweight'), 10., 'weight') >= vehicle_weight)]
+    return min(viable, key=_physics_travel_time) if viable else {}
 
-    if G.is_multigraph():
-        if not edge_data:
-            return {}
+def custom_weight_function(u, v, d, vehicle_width=2., vehicle_height=2., alpha=.5, beta=.5):
+    # NetworkX passes a key->attributes dictionary on MultiDiGraph callbacks.
+    del u, v, alpha, beta
+    candidates = list(d.values()) if d and all(isinstance(value, dict) for value in d.values()) else [d]
+    feasible = [data for data in candidates
+                if _parse_osm_float(data.get('width'), 6.5) >= vehicle_width
+                and _parse_osm_float(data.get('maxheight'), 4.5) >= vehicle_height]
+    return min((_physics_travel_time(data) for data in feasible), default=math.inf)
 
-        # Evaluate all parallel keys — prefer the fastest that fits the vehicle
-        viable = []
-        for key, data in edge_data.items():
-            edge_width = float(data.get('width', 10.0))
-            edge_height = float(data.get('maxheight', 10.0))
-            if vehicle_width <= edge_width and vehicle_height <= edge_height:
-                viable.append(data)
-
-        if viable:
-            return min(viable, key=lambda d: float(d.get('travel_time', d.get('length', 0.0) or 0.0)))
-
-        # No viable edge — return the least-bad option (for error reporting)
-        return min(edge_data.values(),
-                   key=lambda d: float(d.get('length', 0.0) or 0.0))
-
-    return edge_data
-
-
-def custom_weight_function(u, v, d, vehicle_width=2.0, vehicle_height=2.0, alpha=0.5, beta=0.5):
-    """
-    Custom weight function combining distance/time with difficulty/risk.
-    """
-    # ---------------------------------------------------------
-    # 1. HARD PHYSICS CONSTRAINTS (Enterprise Level)
-    # ---------------------------------------------------------
-    edge_width = float(d.get('width', 10.0))
-    edge_height = float(d.get('maxheight', 10.0))
-
-    # If the vehicle is physically wider or taller than the road,
-    # it mathematically cannot pass.  Return infinity.
-    if vehicle_width > edge_width or vehicle_height > edge_height:
-        return float('inf')
-
-    # ---------------------------------------------------------
-    # 2. DYNAMIC TRAFFIC OVERLAY (Time-based Weight)
-    # ---------------------------------------------------------
-    travel_time = float(d.get('travel_time', d.get('length', 10.0) / 10.0))
-    risk = float(d.get('obstruction_risk', 0.1))
-
-    # Penalize routes that have high obstruction risk
-    weight = travel_time * (1.0 + (risk * 2.0))
-    return weight
-
-
-def run_astar_routing(orig_node: int, dest_node: int, G=None,
-                      graph_path: str = None,
-                      vehicle_width=2.0, vehicle_height=2.0,
-                      vehicle_weight=2.0,
+def run_astar_routing(orig_node, dest_node, G=None, graph_path=None,
+                      vehicle_width=2., vehicle_height=2., vehicle_weight=2.,
                       max_network_speed_mps=33.33):
-    if G is None and graph_path is not None:
-        print(f"Loading pruned graph from {graph_path}")
+    from src.evaluation.ablations import benchmark_vehicle
+    del max_network_speed_mps
+    if G is None:
+        if graph_path is None:
+            raise ValueError('provide a graph or graph_path')
         G = ox.load_graphml(graph_path)
-    elif G is None:
-        raise ValueError("Must provide either a pre-loaded Graph G or a graph_path.")
+    vehicle = benchmark_vehicle('exploratory')
+    vehicle.width_m, vehicle.height_m, vehicle.gross_weight_t = vehicle_width, vehicle_height, vehicle_weight
+    vehicle.axle_load_t = vehicle_weight/2.
+    return route_baseline(G, orig_node, dest_node, vehicle, hard_constraints=True)[0]
 
-    start_time = time.time()
-
-    # Pre-fetch target coordinates for the heuristic
-    target_lat = G.nodes[dest_node]['y']
-    target_lon = G.nodes[dest_node]['x']
-
-    try:
-        # Weight function injected with vehicle constraints
-        weight = lambda u, v, d: custom_weight_function(
-            u, v, d, vehicle_width, vehicle_height
-        )
-
-        # Haversine admissible heuristic (FIXED — no more Euclidean on degrees)
-        def h(u, _v):
-            return haversine_admissible_heuristic(
-                G.nodes[u]['y'], G.nodes[u]['x'],
-                target_lat, target_lon,
-                max_network_speed_mps
-            )
-
-        route = nx.astar_path(
-            G,
-            source=orig_node,
-            target=dest_node,
-            heuristic=h,
-            weight=weight
-        )
-
-        end_time = time.time()
-
-        # Calculate stats
-        route_length = 0.0
-        for u, v in zip(route[:-1], route[1:]):
-            edge_data = get_edge_data(G, u, v, vehicle_width, vehicle_height)
-            route_length += float(edge_data.get('length', 0))
-
-        print(f"Route found in {end_time - start_time:.4f} seconds.")
-        print(f"Route stops (nodes): {len(route)}")
-        print(f"Total distance: {route_length:.2f} meters")
-
-        return route
-
-    except nx.NetworkXNoPath:
-        print(f"No path found between {orig_node} and {dest_node} for this vehicle.")
-        return None
-
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run Baseline A* Routing on Pruned Graph")
-    parser.add_argument("--graph", type=str, required=True, help="Path to pruned GraphML")
-    parser.add_argument("--orig", type=int, required=True, help="Origin Node ID")
-    parser.add_argument("--dest", type=int, required=True, help="Destination Node ID")
-
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--graph', required=True)
+    parser.add_argument('--orig', type=int, required=True)
+    parser.add_argument('--dest', type=int, required=True)
     args = parser.parse_args()
-    run_astar_routing(args.orig, args.dest, graph_path=args.graph)
+    print(run_astar_routing(args.orig, args.dest, graph_path=args.graph))

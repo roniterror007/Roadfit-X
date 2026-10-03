@@ -1,0 +1,460 @@
+                Proactive vehicle re-routing strategies for
+                                              congestion avoidance
+
+       Juan (Susan) Pan∗, Mohammad A. Khan∗, Iulian Sandu Popa†, Karine Zeitouni† and Cristian Borcea∗
+                                                        ∗Department of Computer Science
+                     New Jersey Institute of Technology, University Heights, Newark, New Jersey 07102, USA
+                                        Email: jp238@njit.edu, mak43@njit.edu, borcea@cs.njit.edu
+                                                        †Department of Computer Science
+                                         University of Versailles Saint-Quentin-en-Yvelines, France
+                                 Email: iulian.sandu-popa@prism.uvsq.fr, karine.zeitouni@prism.uvsq.fr
+
+
+   Abstract—Trafﬁc  congestion  causes  driver  frustration  and               drivers with better alternative routes in real-time. Implicitly,
+costs  billions  of  dollars  annually  in  lost  time  and  fuel  con-        fuel consumption and pollution will be reduced as well.
+sumption.  This  paper  presents  three  trafﬁc  re-routing  strate-              Recently, companies such as Google and Microsoft have
+gies designed to be incorporated in a cost-effective and easily                started to use infrastructure-based trafﬁc information to com-
+deployable  vehicular  trafﬁc  guidance  system  that  reduces  the            pute trafﬁc-aware shortest routes. These solutions are better
+effect of trafﬁc congestions. This system collects real-time trafﬁc
+data from vehicles and road-side sensors and computes proactive,               than  just  showing  the  current  trafﬁc  conditions  to  drivers
+individually-tailored  re-routing  guidance  which  is  pushed  to             because  they  can  guide  them  as  function  of  other  factors
+vehicles when signs of congestion are observed on their route.                 such as historic trafﬁc and current weather. However, these
+   Extensive  simulation  results  over  two  urban  road  networks            solutions do not try to avoid congestions explicitly (i.e., they
+show that all three strategies, namely multipath load balancing                are  reactive  solutions)  and  provide  the  same  guidance  for
+considering future vehicle positions (EBkSP), random multipath
+load balancing (RkSP), and dynamic shortest path (DSP), sig-                   all  vehicles  on  the  road  at  a  certain  moment  as  function
+niﬁcantly decrease the average travel time. EBkSP is the best,                 of their destination (i.e., pull model in which drivers query
+with as much as 104% improvement compared to the “no re-                       for  the  shortest  route  to  destination).  Therefore,  similar  to
+routing” baseline. Additionally, it lowers with 34% the re-routing             route oscillations in computer networks, they could lead to
+frequency compared to the other strategies. Finally, all strategies            unstable global trafﬁc behavior: when it happens, congestion
+offer  good  improvements  even  when  many  drivers  ignore  the
+guidance or when the system adoption rate is relatively low.                   is switched from one route to another if a signiﬁcant number
+                                                                               of drivers use the guidance.
+                          I.  INTRODUCTION                                        This  paper  presents  three  trafﬁc  re-routing  strategies  de-
+                                                                               signed to be incorporated in a cost-effective and easily de-
+   In 2010, trafﬁc congestion caused urban Americans to travel                 ployable  vehicular  trafﬁc  guidance  system  that  reduces  the
+4.8 billion hours more and to purchase an extra 1.9 billion                    effect of trafﬁc congestions. In this system, vehicles can be
+gallons of fuel for a congestion cost of $101 billion. It is                   viewed as both mobile sensors (i.e., collect real-time trafﬁc
+predicted that by 2015, this cost will rise to $133 billion (i.e.,             data)andactuators(i.e.,changetheirpathinresponsetonewly
+morethan$900foreverycommuter)andtheamountofwasted                              received  guidance).  The  system  is cost-effective  and  easily
+fuel will jump to 2.5 billion gallons (i.e., enough to ﬁll more                deployable because it does not require road-side infrastructure;
+than 275,000 gasoline tanker trucks) [1]. While congestion is                  it can work using only smart phones carried by drivers. Where
+largely thought of as a big city problem, delays are becoming                  road-side sensors are available, the system can take advantage
+increasingly  common  in  small  cities  and  some  rural  areas               of  them  to  supplement  the  data  provided  by  vehicles  to
+as  well.  Hence,  ﬁnding  effective  solutions  for  congestion               build an accurate representation of the global real-time trafﬁc
+mitigationatreasonablecostsisbecomingastringentproblem.                        conditions. Periodically, the system evaluates the congestion
+   Static distributed road-side sensors (e.g., induction loops,                levels in the road network. When signs of congestions are
+video cameras) and vehicles acting as mobile sensors (i.e.,                    observed  on  certain  road  segments,  it  computes  proactive,
+using  embedded  vehicular  systems  or  smart  phones)  can                   individually-tailored re-routing guidance which is pushed to
+collect real-time data to monitor the trafﬁc at ﬁne granularity.               vehicles which would pass through the congested segments.
+For example, the Mobile Millennium project [2] demonstrated                    It is important to notice that we do not “force” the drivers
+that only a low percentage of drivers need to provide data                     to follow alternative routes: the guidance may or may not be
+to  achieve  an  accurate  trafﬁc  view.  Unlike  a  large  amount             accepted by drivers.
+of research which focuses on accurately collecting and cal-                       The  three  re-routing  strategies  that  we  propose  are:  (1)
+ibrating  the  data  (e.g.,  predicting  travel  times  in  speciﬁc            dynamic shortest path (DSP), which assigns to each vehicle
+areas at particular times of day or improving the trafﬁc light                 the current shortest path to destination; (2) random multipath
+cycles) [3], we focus on alleviating congestion by providing                   load balancing (RkSP), which computes k shortest paths for
+each vehicle and randomly assigns the vehicle to one of them;                  Unfortunately,  there  is  still  a  signiﬁcant  gap  between  the
+and (3) multipath load balancing considering future vehicle                    theoretical  or  simulation  results  and  potentially  deployable
+positions (EBkSP), which computes k shortest paths for each                    solutions. Some issues are: tractability for large scale road
+vehicle and assigns the vehicle to the path with the lowest                    networks, capability of providing real-time guidance, behavior
+popularity as deﬁned by the path entropy. Intuitively, DSP                     in the presence of congestion, ability to work when not all
+may move congestion from one spot to another if many drivers                   drivers are part of the system, and robustness to drivers who
+share the same destinations and current positions. RkSP uses                   ignore  the  guidance.  For  example,  they  assume  the  set  of
+multiple paths to provide for better trafﬁc ﬂow distribution, but              Origin-Destination  (OD)  pairs  and  the  trafﬁc  rate  between
+its random nature is far from optimal. EBkSP uses multiple                     every OD pair are known. This information is highly dynamic
+pathsaswell,butitisexpectedtoprovidebetterloadbalancing                        especially in city scenarios, leading to frequent iterations of
+because it estimates the future load on each path.                             computationally expensive algorithms even when not needed
+   We extensively evaluated these strategies through simula-                   from a driver beneﬁt point of view. Additionally, the OD set
+tions over two medium-size urban road networks and across                      is large, and the DTA algorithms may not be able to compute
+several parameters including the number of alternative paths,                  the equilibrium fast enough to inform the vehicles about their
+the  re-routing  period,  the  congestion  threshold,  the  vehicle            new routes in time to avoid congestions. Our system, on the
+selection level, the vehicle priority, and the driver compliance               other hand, is designed to be effective and fast, although not
+rate. The results show that all three strategies signiﬁcantly                  optimal, in deciding which vehicles should be re-routed when
+decrease  the  average  travel  time.  EBkSP  is  the  best,  with             signs of congestion occur as well as computing alternative
+as  much  as  104%  improvement  compared  to  the  “no  re-                   routes for these vehicles.
+routing” baseline. Additionally, it lowers with 34% the re-                       The complexity of DTA systems has led scientists to look
+routing  frequency  compared  to  the  other  strategies;  this  is            for  inspiration  in  Biology  and  Internet  protocols.  In  [11],
+important because too frequent re-routings may annoy drivers                   Wedde et al. developed a road trafﬁc routing protocol, Bee-
+who can subsequently ignore all guidance. Among the three                      JamA,  based  on  honey  bee  behavior.  Similarly,  Tatomir  et
+strategies, DSP has the best computation time. Nevertheless,                   al. [12] proposed a route guidance system based on trail-laying
+EBkSP will be the preferred strategy in our system due to its                  ability of ants. Inspired by the well-known Internet routing
+better average travel time and re-routing frequency. Finally, all              protocols, Holger et al. [13] proposed decentralized Organic
+strategies offer good improvements even for low compliance                     Trafﬁc  Control.  However,  since  they  are  distributed,  these
+rate  (i.e.,  drivers  ignore  the  guidance)  and  relatively  low            approaches have only a partial view of the trafﬁc conditions,
+penetration rate (i.e., ratio of vehicles who adopt our system).               which  may  lead  to  less  accurate  re-routing.  Also,  simply
+   The rest of this paper is organized as follows. Section II                  treatingvehiclesaspacketswhichalwayslistentotheguidance
+discusses related work. Section III describes the system model                 ignores  the  nature  of  human  behavior.  Furthermore,  these
+and our assumptions. Section IV presents the three re-routing                  systems  react  to  real-time  data  without  insight  into  future
+strategies.SectionVshowsoursimulationresultsandanalysis.                       conditions, thus introducing greater vulnerability to switching
+Conclusions and future work are presented in Section VI.                       congestion from one spot to another.
+
+                         II.  RELATED WORK                                                              III.  SYSTEM MODEL
+   Services such as INRIX [4] provide real-time trafﬁc infor-                     Our  trafﬁc  guidance  system  is  composed  of:  (1)  a  cen-
+mation at a certain temporal accuracy and allow drivers to                     tralized trafﬁc monitoring and re-routing service (which can
+receive travel time estimations for alternative routes. Accord-                physically  be  distributed  across  several  servers),  and  (2)  a
+ing to Wardrop’s ﬁrst trafﬁc equilibrium principle [5], such                   vehicle software stack for periodic trafﬁc data reporting (po-
+services could lead to a user-optimum trafﬁc equilibrium. It is                sition,  speed,  direction)  and  showing  alternative  routes  to
+known, however, that no true equilibrium can be found under                    drivers.  Vehicles  run  this  software  either  on  an  embedded
+congestion [6]. Even more important, the usefulness of such                    vehicular system or a smart phone. Vehicles are equipped with
+services is limited by their reactive nature: they cannot avoid                GPS receivers and can communicate with the service over
+congestions. System such as Google Maps and Microsoft’s                        the Internet when needed. When starting a trip, each vehicle
+Bing  are  able  to  forecast  congestion  and  its  duration  by              informs the service of its current position and destination; the
+performing advanced statistical predictive analysis of trafﬁc                  service sends back a route computed according to its strategy.
+patterns. Unfortunately, this is still not enough due to non-                  It is assumed that the service knows the road network as well
+recurringcongestions,whichrepresentover50%ofallconges-                         as the capacity and legal speed limits on all roads.
+tions [7]. Our solution moves one step forward by providing                       Logically,  the  trafﬁc  guidance  system  operates  in  four
+effective methods for proactive re-routing when congestion is                  phases executed periodically: (1) data collection and represen-
+predicted based on real-time trafﬁc information.                               tation; (2) trafﬁc congestion prediction; (3) vehicle selection
+   An  alternative  to  our  work  could  be  the  research  done              forre-routing;and(4)choosingalternativeroutesforeachsuch
+on dynamic user-optimal trafﬁc assignment (DTA) [8]–[10].                      vehicle and pushing the guidance to the vehicles. Since data
+These solutions periodically compute the assignment of traf-                   collection has been studied extensively in the literature, we
+ﬁc  ﬂows  to  routes  that  lead  to  dynamic  user  equilibrium.              assume that the centralized service receives trafﬁc data from
+vehicles and road-side sensors where available. We discuss in                  from the congested segment. Basically, the service performs
+detail each of the other phases in this section and Section IV.                a breadth ﬁrst search (BFS) on the inverted network graph
+A. Trafﬁc data representation and estimation                                   (i.e., the road network graph is directed), starting from the
+                                                                               congested segments with maximum depthL and considers all
+   The road network is represented as a directed, weighted                     these cars as candidates for re-routing.
+graph,  where  nodes  correspond  to  intersections,  edges  to                                  IV.  RE-ROUTING STRATEGIES
+road  segments,  and  weights  to  estimated  travel  times.  The
+weights are updated periodically as new trafﬁc data becomes                       Recent research has proved that real-time trafﬁc ﬂow data
+available. Several methods can be employed to estimate the                     and road travel time can be determined based on data reported
+travel time over a road segment. For instance, using vehicle                   by vehicles or road-side sensors [2], [16], [17]. The question is
+probe data collected from on-board GPS devices to reconstruct                  how to utilize this knowledge in an intelligent fashion to avoid
+the state of trafﬁc is a well-studied topic [2], [14]. We use the              congestion and reduce the drivers’ travel times. This section
+Greenshield’s model [15] to estimate the travel time since it                  presents our three re-routing strategies; all of them use the
+is used extensively in dynamic trafﬁc assignment models by                     estimated travel time in the computation of the (k-)shortest
+transportation researchers. The model considers that there is                  path(s) for each of the vehicles selected as described in the
+a linear relationship between the estimated road speedVi and                   previous section.
+the trafﬁc densityKi (vehicles per meter) on road segmenti,                    A. Dynamic Shortest Path
+as seen in Equation 1:
+                                                                                  Dynamic  Shortest  Path  (DSP)  is  a  classical  re-routing
+               Vi =Vf(1− KiKjam)   Ti =Li/Vi               (1)                 strategy that assigns the selected vehicles to the path with
+                                                                               lowest  travel  time.  The  advantage  of  this  strategy  lays  in
+where Kjam   and Vf   are   the   trafﬁc   jam   density   and                 its simplicity and consequently reasonable computational cost
+the  free  ﬂow  speed  for  road  segment i,  while Ti  and                    O(E +Vlog(V)), where E is the number of road segments
+Li   are   the   estimated   travel   time   and   length   for   the          and V is the number of intersections. We expect this strategy
+same   segment.   The   free   ﬂow   speed Vf   is   deﬁned   as               to provide good results when the number of re-routed vehicles
+the  average  speed  at  which  a  motorist  would  travel  if                 is low. In this case, the risk of switching congestion from one
+there   were   no   congestion   or   other   adverse   conditions.            spot to another is low.
+To   simplify   our   implementation,   we   consider   that   the             B. Random k Shortest Paths
+free  ﬂow  speed  is  the  speed  limit.  Basically, Ki/Kjam
+is   the   ratio   between   the current        number      of   vehicles         Random k Shortest Paths (RkSP) computes for each vehicle
+and            the    max        number      of   vehicles.            The     to  be  re-routed  its  k-shortest  paths.  Then,  it  assigns  each
+current    number      of   vehicles                is                obtained selected vehicle to one of the k paths randomly. The goal
+from     the     trafﬁc     data     collected     by     the     service,     is  to  avoid  switching  congestion  from  one  spot  to  another
+whereas         the   max         number      of   vehicles             =      by balancing the re-routed trafﬁc among several paths. The
+length    of  road/(avg      vehicle    length+min         gap).               price to pay is a higher computational complexity,O(kV(E+
+B. Congestion prediction                                                       Vlog(V))) [18], which increases linearly withk. Although a
+                                                                               largerk will allow better trafﬁc balancing, it also increases
+   Periodically, the service checks the road network to detect                 the difference in the travel time among thek paths. Therefore,
+signs of congestion. A road segment is considered to exhibit                   to prevent an excessive increase of the travel time for some
+congestion signs whenKi/Kjam>δ, whereδ∈ [0,1] is                               drivers, RkSP limits the maximum allowed relative difference
+a  threshold.  Choosing  the  right  value  forδ  is  particularly             between the fastest and the slowest path to 20%. In section V,
+important for the service performance. If it is too low, the                   we experimentally varyk to measure its impact.
+service could trigger unnecessary re-routing; this may lead to                 C. Entropy Balanced k Shortest Paths
+an increase in the drivers’ travel times. If it is too high, the
+re-routing process could be triggered too late and congestion                     While RkSP addresses the main potential shortcoming of
+will not be avoided. The evaluation in section V-B conﬁrms                     DSP (i.e., moving congestion to another spot), it has its own
+these hypotheses.                                                              deﬁciencies. First, it increases the computational time, which
+C. Selection of vehicles to be re-routed                                       matters because the alternative paths must be computed and
+                                                                               pushed to vehicles before they pass the re-routing intersection.
+   When a certain road segment presents signs of congestion,                   Second, it assigns paths randomly to vehicles, which is far
+the service looks for nearby vehicles to re-route. Speciﬁcally,                from  optimal  both  from  a  driver  point  of  view  and  the
+we  select  vehicles  from  incoming  segments  (i.e.,  segments               global trafﬁc point of view. Therefore, we propose an Entropy
+which bring trafﬁc into the congested one). To decide how                      Balanced k Shortest Paths (EBkSP) strategy to improve on
+far from congestion to look for candidates for re-routing, the                 RkSP at the cost of slightly increased complexity. The idea
+service uses a parameterL (level), which denotes the furthest                  is to perform a more intelligent path selection by considering
+distance (in number of segments) the vehicle can be away                       the impact that each selection has on the future density of
+the affected road segments. We expect this optimization to                      Algorithm 1 EBkSP re-routing pseudo-code
+improve the trafﬁc from a global point of view. In addition,                      procedure main
+EBkSP ranks the cars to be re-routed based on an urgency                          updateEdgeWeights()
+function that quantiﬁes the degree to which the congested road                    congestedRoads=detectCongestion(edgeWeights)
+                                                                                  if #congestedRoads>0 then
+affects the driver travel time. Thus, the more affected vehicles                     selectedVehicles=selectVehicles(congestedRoads)
+will have priority and be re-routed ﬁrst.                                            sortedVehicles=sortByUrgency(selectedVehicles)
+   To avoid creating new congestions through re-routing, we                          odPairs=updateODPairs(selectedVehicles)
+                                                                                     allPaths=compuate   allkShortestPaths(odPairs)
+associate a “popularity” measure to road segments in EBkSP.                          doReroute(allPaths, sortedVehicles)
+Future congestion occurs if many drivers take the same road                       end if
+segment within the same future time window. 1 As we assume                        end procedure
+that the drivers share their route information, it is possible to                 procedure doReroute(allPaths, sortedVehicles)
+estimatethefuturefootprintofeachdriverintheroadnetwork.                           for all vehicle in sortedVehicles do
+                                                                                     {origin, dest}=getVehicleOD(vehicle)
+Deﬁnition 1. A footprint counter,fc, of a road segment is                            kPaths=getkPaths(allPaths, origin, dest)
+the total number of vehicles that are assigned to paths that                         newpath = getLeastPopularPath(kPaths)
+                                                                                     setRoute(vehicle, newpath)
+include this segment.                                                                updateFootprint(vehicle, newpath)
+                                                                                  end for
+   Similar to entropy in information theory, we deﬁne the path                    end procedure
+popularity as follows.
+Deﬁnition 2. Let (p1,...,pk) be the set of paths computed for
+the vehicle which will be assigned next. Let (r1,...,rn) be
+the union of all segments of (p1,...,pk), and let (fc1,...,fcn)
+be  the  set  of  footprint  counters  associated  with  these  seg-
+ments.  The  popularity  of pj   is  deﬁned  as Pop(pj)   =
+eE(pj).E(pj)  is  the  weighted  entropy  ofpj  and  is  com-
+puted asE(pj) =−∑ni=1ωifciN  ln fciN ,N =∑ni=1fci, and
+ωi = CavgCi    is  a  weight  factor.Cavg  is  the  average  road
+capacity of the network andCi is the road capacity ofri..
+   The value ofE(pj) measures the probability that a number
+of vehicles will be on the pathpj in a time window. According                                       Fig. 1: A simple re-routing example
+to the above deﬁnition, we have0≤Pop(pj)≤m.Pop(pj)                              popularity among previously assigned vehicles. Speciﬁcally,
+has the maximum valuem when every previously assigned                           the  most  urgent  vehicle  is  assigned  the  current  best  path
+vehicle traverses entirelypj  (i.e., they take the same path).                  without  considering  others.  Then,  the  future  footprints  is
+Pop(pj) has the minimum value when no one takes the path                        updated based on the new path. When assigning the second
+pj. Intuitively: the higher the popularity of a path, the higher                vehicle, the popularity score can be calculated and only the
+the probability that more drivers will take this path.                          least popular path will be chosen. Algorithm 1 presents the
+   In  addition  to  path  popularity,  EBkSP  uses  an  urgency                EBkSP’s pseudo code. Besides what was described so far, the
+function to rank the vehicles to be re-routed.                                  pseudo-code shows an optimization related to shortest path
+Deﬁnition 3. Given a set of vehiclesV = (v1,v2,v3,...,vm)                       computation.  Instead  of  computing  the  k-shortest  paths  for
+to be re-routed, we deﬁne two urgency functions to compute                      each  vehicle  to  be  re-routed,  we  compute  these  paths  for
+the re-routing priority of a vehicle inV:                                       the origin-destination (OD) pairs that have selected vehicles
+
+   •  Relative       Congestion       Impact:  RCI=(RemTT-                      traveling  between  them  (i.e.,  the  set  of  OD  pairs  is  much
+      RFFTT)/RFFTT                                                              smaller than the set of vehicles to be re-routed). The same
+   •  Absolute Congestion Impact:ACI=RemTT-RFFTT                                procedure is used in RkSP and DSP.
+whereRemTT is the remaining travel time, andRFFTT is                               Figure 1 shows an example. We assume vehicles(v1,v2,v3)
+the remaining free ﬂow travel time for the vehicle.                             have been assigned to their paths beforev4, and each road
+   RCI  measures  the  impact  of  congestion  on  a  vehicle                   has  the  same  capacity  (i.e.,ωi  =  1).  The  footprints  of
+relative to its remaining travel time, whereasACI emphasizes                    (v1,v2,v3) in the next time window areC1(ab,bg,gh,hi,ij),
+the absolute increase in the travel time. In section V-B, we                    C2(fg,gh,hi,ij),  andC3(ch,hk).  Forv4,  which  travels
+evaluate EBkSP under these two urgency functions.                               from ab   to ij,   there   are   three   alternatives   with   simi-
+   After vehicle selection and prioritization according to the                  lar  travel  times: p1(ab,bg,gh,hi,ij), p2(ab,bc,ch,hi,ij),
+urgency function, we assign each driver the path with least                     and p3(ab,bc,cd,di,ij).  The  union  of  their  segments  is
+                                                                                (ab,bg,gh,hi,ij,bc,ch,cd,di),  and  their  footprint  counters
+
+  1The time window size equals the period used by the system to evaluate        are  (1,1,2,2,2,0,1,0,0).  Consequently, N=9, EV(p1)=1.49,
+congestion.                                                                     EV(p2)=1.16 andEV(p3)=0.58. Hence,v4 will be assigned
+                                                                                                TABLE I: Statistics of the two road networks
+                                                                                                                            Brooklyn        Newark
+                                                                                        Network area                        75.85km2       24.82km2
+                                                                                        Total number of road segments          551            578
+                                                                                        Total length of road segments       155.55km       111.41km
+                                                                                        Total number of intersections          192            195
+
+
+
+                       Fig. 2: The simulation process
+
+top3 because it is the least popular.
+                           V.  EVALUATION
+   The objective of our simulation-based evaluation is to study
+theperformanceofthethreere-routingstrategiesundervarious
+scenarios. Speciﬁcally, we address the following questions:
+
+   •  What  is  the  average  travel  time,  average  number  of                             (a) Brooklyn                             (b) Newark
+      re-routings and computation time among the proposed                                         Fig. 3: Trafﬁc ﬂow in the road networks
+      strategies?                                                               left area to the right area in an interval of 1000 seconds. The
+   •  How  does  each  parameter  (e.g.  number  of  alternative
+      paths, re-routing period, congestion threshold, car selec-                origins and the destinations are randomly picked from the left
+      tion level, etc.) inﬂuence the performance?                               area and the right area, respectively. In the Newark network,
+   •  How robust is the system under various compliance rates                   908 cars were generated having the origins picked randomly
+      (i.e., percentage of drivers who follow the guidance) and                 from the peripheral road segments and the destinations on the
+      penetration rates (i.e., percentage of vehicles that have                 road segments inside the hot spot circle.
+      our software)?                                                               In the simulations, we use the default settings in SUMO
+                                                                                13.0.1 for vehicle length=5m, the minimal gap=2.5m, the car
+A. Simulation setup                                                             following  model  (Krauss  [23]),  and  the  driver’s  imperfec-
+   We employed SUMO [19] and TraCI [20] for our simula-                         tion=0.5. For each scenario, we average the results over 15
+tions. SUMO is an open source, highly portable, microscopic                     runs. Initially, we assume an ideal scenario in which all drivers
+road trafﬁc simulation package designed to handle large road                    have the system and accept the route guidance. We relax these
+networks. TraCI is a library providing extensive commands to                    assumptions in the last part of the evaluation. Table II deﬁnes
+control the behavior of the simulation including vehicle state,                 the parameters used in our evaluation.
+road conﬁguration, and trafﬁc lights. We implement the re-                      B. Results and Analysis
+routing strategies algorithms using TraCI. Essentially, when
+SUMO is called with the option to use TraCI, SUMO starts                           Average travel time. Figure 4 presents the average travel
+up, loads the scenario, and then waits for a command. Thus,                     time obtained with the three strategies on both networks. The
+variables in the simulation can be changed (e.g., new paths                     “noreroute” bars indicate the travel time in the absence of
+assigned to certain vehicles). Then, a new command can be                       any re-routing strategy. The results show that all the proposed
+sent  with  how  many  seconds  to  run  the  simulation  before                strategies improve the travel time signiﬁcantly. EBkSP has the
+stopping and waiting for another command.                                       best results; compared to “noreroute”, it reduces the travel
+   We   downloaded   two   urban   road   maps   from   Open-                   time  by  up  to  81%  and  104%  on  Brooklyn  and  Newark,
+StreetMap [21] in osm format. One is a section of Brooklyn,                     respectively. Compared to DSP, it is better by 15% and 25%.
+NY and the other is in Newark, NJ. We use the Netconvert                           The  results  conﬁrm  our  hypotheses  in  Section  IV.  DSP
+tool in SUMO to convert the maps into SUMO usable format,                       can improve the travel time, since it re-routes dynamically
+and  the  Trafﬁcmodeler  tool  [22]  to  generate  vehicle  trips.              the vehicles by considering the trafﬁc conditions. However, in
+Netconvert removes the pedestrian, railroad, and bus routes,                    somecases,ifmanyvehicleshavesimilarcurrentpositionsand
+and sets up a static trafﬁc light at each intersection. All roads                               TABLE II: Parameters used in the evaluation
+have one lane in each direction, with the same speed limit.                         period                The frequency of triggering the re-routing
+The statistics of the two networks are shown in Table I. By                         thresholdδ            Congestion threshold; ifKi/Kjam>δ, the
+default,theshortestdistancepathsareautomaticallycalculated                                                road segment is considered congested
+                                                                                    urgency               Urgency policy:RCI orACI
+and assigned to each vehicle at the beginning of simulation.                                              Network depth to select vehicles for re-routing
+Therefore, we modiﬁed the shortest path algorithm in SUMO                           levelL                starting from the congested segment and using
+to be based on the travel time instead of distance. Figure 2                                              BFS on the inverted network graph
+illustrates the simulation process.     Figures 3 (a) (b) show                      # pathsk              The max number of alternative paths for each
+                                                                                                          vehicle; by defaultk = 3
+the trafﬁc ﬂow in both networks. We used Trafﬁcmodeler to                           compliance rate       Percentage of drivers who accept the guidance
+generate a total of 1000 cars in the Brooklyn network from the                      penetration rate      Percentage of vehicles which have our software
+             (a) Brooklyn                            (b) Newark
+      Fig. 4: Average travel time (k=3, urgency=ACI, period=450s)              Fig. 6: Number of congested road segments on the Brooklyn network over
+                                                                               time/iterations. (δ=0.7, period=450s,L=3, urgency=ACI,k=3)
+                                                                               thenumberofcongestedroadsincreasesforallstrategiesinthe
+                                                                               ﬁrst iterations. Then, all strategies manage to rapidly decrease
+                                                                               the number of congested roads. As expected, EBkSP reduces
+                                                                               the number of congested roads faster than the others.
+                                                                                  CPU time. So far, the results have conﬁrmed our hypothe-
+                                                                               sis that EBkSP is the best strategy for ﬁghting congestion,
+                                                                               followed  by  RkSP  and  DSP.  At  the  same  time,  the  time
+                                                                               complexity of the three algorithms inverts the ranking: DSP
+             (a) Brooklyn                            (b) Newark                has the best computational efﬁciency, followed by RkSP and
+ Fig. 5: Average number of re-routings (k=3, period=450s, urgency=ACI)         EBkSP. However, this complexity analysis is pertinent only
+destinations, new congestion can be create by the re-routing                   when we consider the re-routing of a single vehicle. From
+process. RkSP avoids this shortcoming since it balances the                    the system point of view, the global computational complexity
+ﬂows among several paths. Nevertheless, a randomly picked                      also depends on the number of re-routings processed in a time
+path is not necessarily the best one. Finally, EBkSP offers the                window; this number is a function of the number of congested
+best performance by carefully selecting the path for each re-                  road segments and the congestion severity (i.e., how many
+routed vehicle. The rationale is that the possibility of creating              vehicles are selected for re-routing).
+new congestion is lower if the driver takes the least popular                     Figure  7  (a)  shows  the  global  CPU  time  consumed  for
+path amongk paths with similar travel time.                                    re-routing  by  the  three  methods.  DSP  has  the  least  CPU
+   Our experiments also demonstrated that levels 3 and 4 work                  time, whereas RkSP needs higher computation time to achieve
+best for selecting a relatively optimal number of vehicles for                 lower average travel time. Meanwhile, EBkSP requires less
+re-routing (they have similar performance for Brooklyn, and                    computation time than RkSP even though they have the same
+level3isbetterforNewark).Lowerlevelsdonotselectenough                          k-shortest  path  computation  complexity.  The  reason  is  that
+cars. As shown in Figure 5, level 4 leads to more re-routings.                 EBkSP decreases the total number of re-routings processed
+Thus, we believe level 3 is a better choice for the system.                    in a period; this decrease becomes apparent when we look
+   Average number of re-routings. It is important that that                    at the number of OD pairs in Figure 7 (b). DSP induces the
+the number of re-routings for a given vehicle during a trip stay               most re-routings. However, since its complexity is the lowest,
+low. From the driver point of view, changing the path to her                   its computation time is the lowest as well. Nevertheless, since
+destination too often can be distracting and annoying. This can                EBkSP performs signiﬁcantly better in terms of average travel
+eventually lead to a rejection of the guidance system by the                   time and re-routing frequency, it will typically be the preferred
+drivers. From the system point of view, having a low number                    strategy.
+of re-routings means decreasing the computational burden on                       Number of alternative paths.k is a determinant parameter
+the system because the re-routing process is costly. Figure 5                  for  the  performance  of  both  RkSP  and  EBkSP.  A  larger
+compares the number of re-routings across the three proposed                   k  value  allows  for  better  trafﬁc  balancing  but  introduces
+strategies. The results indicate that EBkSP produces the least                 higher computational complexity. Furthermore, the maximum
+number of re-routings. Speciﬁcally, compared to DSP, EBkSP                     allowed difference between the slowest path and the fastest
+reduces the average number of re-routings by up to 34% on                      path is 20% in our setting. Therefore, largek  values may
+both Brooklyn and Newark. Compared to RkSP, EBkSP is                           not be necessary because they would lead to computing many
+better by a margin of 22% and 17%. The reason is that by
+considering future path information in the re-routing decision,
+EBkSP can not only mitigate the current congestion, but also
+avoid creating new congestions; hence, the lower necessity for
+recurrent re-routing.
+   To conﬁrm this analysis, we also measured the number of
+congested segments in each iteration for Brooklyn. Figure 6
+shows the results. As trafﬁc is generated during the ﬁrst 1000s,                            (a) CPU time                      (b) Number of OD pairs
+
+                                                                               Fig. 7: CPU time for the Brooklyn network(period=450s, urgency=ACI,k=3)
+        (a) Average travel time                     (b) CPU time                     (a) Re-routing Period (δ=0.7)      (b)           Congestion           Threshold
+Fig. 8: Average travel time and CPU time for RkSP and EBkSP as function                                                 (period=450s)
+ofk for the Brooklyn network (δ=0.7, period=450s,L=3, urgency=ACI)              Fig.  9:  Average  travel  time  as  function  of  the  re-routing  period  (a)  and
+uselesspaths.Figure8comparestheperformanceofRkSPand                             congestion threshold (b) for the Brooklyn network (k=3,L=3, urgency=ACI)
+EBkSPwithdifferentk valuesontheBrooklynnetwork.When
+k = 1 the two methods degenerate into DSP, which produces
+the largest travel time at the lowest CPU cost. RkSP does
+not exhibit any performance improvement fork> 2, while
+EBkSP consistently produces lower travel times with higherk
+values.FromFigure8(b),wecanseethatthecomputationcost
+increaseslinearlywithk forbothmethods.However,EBkSPis
+faster than RkSP especially for largerk (e.g., EBkSP requires                          (a) Low compliance rate                (b) All compliance rate
+23% less cpu time than RkSP whenk equals 5). In conclusion,
+EBkSP has a much more robust and efﬁcient performance than                      Fig. 10: Evaluation on compliance rate on Brooklyn network. (δ=0.7, pe-
+RkSP. Choosing thek value is a matter of trade-off between                      riod=450s,L=3, urgency=ACI)
+improving the average travel time and the computational cost.                   density  value  on  a  road  segment  above  which  the  system
+   Urgency  function.  EBkSP  uses  an  urgency  function  to                   considers it as congested). Choosing a low density threshold
+sort the list of vehicles selected for re-routing. To measure                   may  trigger  unnecessary  re-routing,  which  in  turn  leads  to
+the performance difference between the two proposed ranking                     increased computational burden and re-routings. On the other
+policies –RCI  andACI  (cf. Deﬁnition 3), we conducted                          hand, if the threshold is too large, congestion may be detected
+the ANOVA statistics test over the average travel time from                     too late and the re-routing could be less effective. Figure 9 (b)
+30 EBkSP runs. The results show thatACI produces lower                          conﬁrms  these  hypotheses.  When  the  threshold  increases,
+average travel time thanRCI (p<0.01) in a 95% conﬁdence                         the average travel time decreases due to better accuracy of
+interval. Hence, we useACI as our default urgency function                      congestion identiﬁcation. However, above a certain threshold
+in all the other experiments.                                                   value, the congestion relief mechanism is triggered too late,
+   Re-routing period. Within the trafﬁc guidance system, the                    leadingtoanincreaseoftheaveragetraveltime.Itisimportant
+re-routing process is triggered periodically at a pre-deﬁned                    to notice that the threshold depends on the network layout and
+time interval. A shorter re-routing period leads to higher reac-                type of the roads. For example, we observed that longer road
+tivity of the system, and thus to better travel times. However,                 segmentsworkbetterwithlargerthresholds,whileshorterroad
+the price to pay is increased computation cost, communication                   segments work better with slightly lower thresholds; in all the
+overhead,  and  potentially  re-routings.  At  extreme  cases,  it              other experiments, we usedδ=0.7 for Brooklyn andδ=0.9 for
+might not even be possible to compute the alternative routes                    Newark.
+fast enough to push them to vehicles before they reach the                         Compliance  rate.  It  is  unrealistic  to  assume  that  every
+re-routing intersections.                                                       driver follows the re-routing guidance. The drivers’ compli-
+   Figure 9 (a) shows the average travel time for different re-                 ance rate (i.e., the proportion of drivers who accept the guid-
+routing periods. Generally, the lower the period, the lower the                 ance) is an important factor for the re-routing strategy design.
+average travel time is. Also, the strategies exhibit the closest                Therefore, we measured the average travel time while varying
+results  for  the  lowest  period.  As  the  period  increases,  the            the compliance rate. Figure 10 (a) indicates that the average
+system’s reactivity decreases, which translates into increased                  travel time can be signiﬁcantly improved by all three strategies
+travel time. However, EBkSP consistently produces the lowest                    even  under  low  compliance  rates.  Logically,  Figure  10  (b)
+travel time even when the period is large. Furthermore, the                     shows the performance improves for higher compliance rates.
+performance loss is lower than with the other two strategies.                   Somewhat surprisingly, we observe the performance degrades
+Given the trade-offs between the average travel time on the                     slightly for very high compliance rates. We believe this is due
+one side and the computation cost, communication overhead,                      to our conservative approach to re-route more vehicles than
+and number of re-routings on the other side, we chose a period                  necessary; thus, the strategies can be optimized even further.
+of 450s for the other experiments.                                                 Penetration  rate.  To  understand  how  easy  is  to  deploy
+   Congestion  threshold. Another key element determining                       our solution in real life, we study the effect of penetration
+the  system  reactivity  is  the  congestion  threshold  (i.e.,  the            rate  (i.e.,  proportion  of  vehicles  which  have  our  software)
+                                                                                            [2]D. Work, O. Tossavainen, S. Blandin, A. Bayen, T. Iwuchukwu, and
+                                                                                                 K. Tracton, “An ensemble kalman ﬁltering approach to highway trafﬁc
+                                                                                                 estimation using gps enabled mobile devices,” in Decision and Control,
+                                                                                                 2008. CDC 2008. 47th IEEE Conference on.    IEEE, 2008, pp. 5062–
+                                                                                                 5068.
+                                                                                            [3]S.  L    ¨ammer  and  D.  Helbing,  “Self-stabilizing  decentralized  signal
+                                                                                                 control   of   realistic,   saturated   network   trafﬁc,”   2010.   [Online].
+                                                                                                 Available: http://www.santafe.edu/media/workingpapers/10-09-019.pdf
+                                                                                            [4]http://www.inrix.com.
+                                                                                            [5]J. Wardrop, “Some theoretical aspects of road trafﬁc research,”      Pro-
+      (a) Sensors: Vehicles Only             (b) Sensors: Vehicles & Road-Side                   ceedings of the Institution of Civil Engineers, Part II, vol. 1, no. 36, pp.
+Fig. 11: Average travel time as function of penetration rate (k=3, L=3,δ=0.7,                    252–378, 1952.
+period=450s, urgency=ACI, Brooklyn network)                                                 [6]B. Kerner, “Optimum principle for a vehicular trafﬁc network: minimum
+                                                                                                 probability  of  congestion,”  Journal  of  Physics  A:  Mathematical  and
+on the average travel time. Figure   11 (a) shows the results                                    Theoretical, vol. 44, p. 092001, 2011.
+                                                                                            [7]B. Coifman and R. Mallika, “Distributed surveillance on freeways em-
+when trafﬁc data is collected only from vehicles (no support                                     phasizing incident detection and veriﬁcation,”Transportation Research
+from road-side sensors). When the penetration rate is low, the                                   Part A: Policy and Practice, vol. 41, no. 8, pp. 750–767, 2007.
+performance is the same as “noreroute”. This is because the                                 [8]Y.  Chiu,  J.  Bottom,  M.  Mahut,  A.  Paz,  R.  Balakrishna,  T.  Waller,
+                                                                                                 and J. Hicks, “Dynamic trafﬁc assignment: A primer,” Transportation
+service does not have enough data to accurately detect signs of                                  Research E-Circular, no. E-C153, 2011.
+congestion. Once the penetration rate is greater than 0.3, we                               [9]N. Taylor, Transport, and R. R. Laboratory,     CONTRAM 5, an enhanced
+observe increasing beneﬁts. From 0.6 onward, EBkSP starts to                                     trafﬁc assignment model, ser. TRRL research report.     Transport and
+                                                                                                 Road Research Laboratory, 1990.
+perform better because a larger number of re-routed vehicles                              [10]H. S. Mahmassani, T.-Y. Hu, and R. Jayakrishnan, “Dynamic trafﬁc as-
+require good load balancing.                                                                     signmentandsimulationforadvancednetworkinformatics(dynasmart),”
+   Tosimplifysystemadoption,webelievethatdatafromroad-                                           in 2nd International CAPRI Seminar on Urban Trafﬁc Networks, Capri,
+                                                                                                 Italy, 1992.
+side sensors (in conjunction with data from vehicles) can be                              [11]S.  Senge  and  H.  Wedde,  “Bee  inspired  online  vehicle  routing  in
+leveraged to detect congestion more accurately. Figure 11 (b)                                    large trafﬁc systems,” in ADAPTIVE 2010, The Second International
+demonstrates,indeed,thattheperformancecanbesigniﬁcantly                                          Conference on Adaptive and Self-Adaptive Systems and Applications,
+                                                                                                 2010, pp. 78–83.
+improved in such a case even for low penetration rates; thus,                             [12]B.  Tatomir,  S.  Fitrianie,  M.  Paltanea,  and  L.  Rothkrantz,  “Dynamic
+the initial adopters will have an incentive to use the system.                                   routing in trafﬁc networks and manets using ant based algorithms,” in
+The results also show EBkSP remains the best strategy.                                           Proceedings of the 7th International Conference on Artiﬁcial Evolution,
+                                                                                                 Lille, France, October 2005.
+                                                                                          [13]H. Prothmann, H. Schmeck, S. Tomforde, J. Lyda, J. Hahner, C. Muller-
+               VI.  CONCLUSION AND FUTURE WORK                                                   Schloer, and J. Branke, “Decentralised route guidance in organic trafﬁc
+                                                                                                 control,” in Self-Adaptive and Self-Organizing Systems (SASO), 2011
+   This article presented three strategies for vehicular trafﬁc                                  Fifth IEEE International Conference on.   IEEE, 2011, pp. 219–220.
+re-routing that show very promising results compared to the                               [14]S. Maerivoet, “Modelling trafﬁc on motorways: State-of-the-art, numer-
+“no re-routing” case. The EBkSP strategy balances best the                                       ical data analysis, and dynamic trafﬁc assignment,” Ph.D. dissertation,
+                                                                                                 Katholieke Universiteit Leuven, 2006.
+trade-offs between low average travel time and low overhead                               [15]J. Banks,        Introduction to transportation engineering.     McGraw-Hill,
+along several parameters. The results also show that signiﬁcant                                  2002.
+beneﬁts can be achieved even with low compliance rate and                                 [16]E. Horvitz, J. Apacible, R. Sarin, and L. Liao, “Prediction, expectation,
+                                                                                                 and surprise: Methods, designs, and study of a deployed trafﬁc fore-
+moderate penetration rate. The experiments demonstrated how                                      casting service,” in Twenty-First Conference on Uncertainty in Artiﬁcial
+the  performance  can  be  tuned  by  varying  parameters  such                                  Intelligence, 2005, pp. 244–257.
+as re-routing period, number of alternative paths, and density                            [17]P.Mohan,V.Padmanabhan,andR.Ramjee,“Nericell:richmonitoringof
+                                                                                                 road and trafﬁc conditions using mobile smartphones,” inProceedings of
+threshold. As future work, we plan to explore two directions.                                    the 6th ACM conference on Embedded network sensor systems.   ACM,
+First,wewilldesignanadaptiveapproachforvehicleselection                                          2008, pp. 323–336.
+that  considers  additional  parameters  such  as  road  segment                          [18]E. Lawler, “A procedure for computing the k best solutions to discrete
+                                                                                                 optimization problems and its application to the shortest path problem,”
+length, measured compliance rate, and estimated penetration                                      Management Science, pp. 401–405, 1972.
+rate. Second, we will investigate a hybrid architecture that                              [19]M.  Behrisch,  L.  Bieker,  J.  Erdmann,  and  D.  Krajzewicz,  “Sumo  -
+off-loads parts of the computation and decision process in the                                   simulation of urban mobility: An overview,” in SIMUL 2011, The Third
+network and uses V2V communication to better balance the                                         International Conference on Advances in System Simulation, Barcelona,
+                                                                                                 Spain, 2011.
+need for privacy, scalability, and low overhead with the main                             [20]A. Wegener, M. Pi      ´orkowski, M. Raya, H. Hellbr¨uck, S. Fischer, and
+goal of low average travel time.                                                                 J. Hubaux, “Traci: an interface for coupling road trafﬁc and network
+                                                                                                 simulators,” in Proceedings of the 11th communications and networking
+                                                                                                 simulation symposium.   ACM, 2008, pp. 155–163.
+                            ACKNOWLEDGMENT                                                [21]M. Haklay and P. Weber, “Openstreetmap: User-generated street maps,”
+   This work was supported in part by the National Science                                       Pervasive Computing, IEEE, vol. 7, no. 4, pp. 12–18, 2008.
+                                                                                          [22]L.PapaleondiouandM.Dikaiakos,“Trafﬁcmodeler:Agraphicaltoolfor
+Foundation under Grant Number CNS-0831753.                                                       programming microscopic trafﬁc simulators through high-level abstrac-
+                                                                                                 tions,” in Vehicular Technology Conference, 2009. VTC Spring 2009.
+                                 REFERENCES                                                      IEEE 69th.   IEEE, 2009, pp. 1–5.
+                                                                                          [23]S. Krauss, P. Wagner, and C. Gawron, “Metastable states in a micro-
+ [1]D. Schrank, T. Lomax, and S. Turner, “Tti urban mobility report,” 2011.                      scopic model of trafﬁc ﬂow,” Physical Review E, vol. 55, no. 5, p. 5597,
+      [Online]. Available: http://tti.tamu.edu/documents/mobility-report-2011.                   1997.
+      pdf

@@ -1,0 +1,159 @@
+{
+  "evidence_items": {
+    "road_topology": {
+      "name": "Road network topology",
+      "level": "observed",
+      "source": "OpenStreetMap (ODbL)",
+      "description": "Graph structure, edge lengths, road classifications.",
+      "validation_status": "validated",
+      "spatial_scope": "Indiranagar, Hebbal",
+      "temporal_scope": "",
+      "limitations": [
+        "Tag completeness varies",
+        "No turn restrictions implemented"
+      ]
+    },
+    "signal_placement": {
+      "name": "Traffic signal locations",
+      "level": "assumed",
+      "source": "Eight high-degree junctions per network",
+      "description": "Signal placement at intersections above a degree threshold.",
+      "validation_status": "unvalidated",
+      "spatial_scope": "Indiranagar, Hebbal",
+      "temporal_scope": "",
+      "limitations": [
+        "Not verified against Bengaluru BTMC signal inventory",
+        "Number and location are assumed, not observed"
+      ]
+    },
+    "signal_timing": {
+      "name": "Signal phase timing",
+      "level": "synthetic",
+      "source": "SUMO defaults: 60s cycle, actuated mode",
+      "description": "Neither calibrated from Bengaluru timing plans nor validated.",
+      "validation_status": "unvalidated",
+      "spatial_scope": "",
+      "temporal_scope": "",
+      "limitations": [
+        "Bengaluru uses SCATS adaptive control at some junctions",
+        "Phase splits unknown"
+      ]
+    },
+    "demand_matrix": {
+      "name": "Travel demand (OD matrix)",
+      "level": "synthetic",
+      "source": "Boundary-anchor generation with random vehicle mix",
+      "description": "Synthetic directional demand; no observed Bengaluru OD matrix used.",
+      "validation_status": "unvalidated",
+      "spatial_scope": "",
+      "temporal_scope": "",
+      "limitations": [
+        "Real demand patterns unknown",
+        "No time-of-day variation calibrated"
+      ]
+    },
+    "vehicle_behaviour": {
+      "name": "Car following and lane change parameters",
+      "level": "assumed",
+      "source": "SUMO Krauss model with default parameters",
+      "description": "Standard SUMO parameters; not calibrated to Bengaluru driving.",
+      "validation_status": "unvalidated",
+      "spatial_scope": "",
+      "temporal_scope": "",
+      "limitations": [
+        "Indian driving behavior differs substantially from defaults",
+        "Two-wheeler filtering not modeled"
+      ]
+    },
+    "ioc_survey": {
+      "name": "IOC Junction vehicle counts",
+      "level": "observed",
+      "source": "B-SMILE project report via OpenCity; count date 24 Aug 2021",
+      "description": "Classified vehicle counts at one corridor, 06:00-20:00.",
+      "validation_status": "partially_validated",
+      "spatial_scope": "IOC Junction corridor",
+      "temporal_scope": "24 Aug 2021 06:00-20:00",
+      "limitations": [
+        "Single corridor, single day",
+        "Four interval totals printed as zero despite positive counts",
+        "No individual trip times available",
+        "Not used to fit the SUMO experiment"
+      ]
+    },
+    "background_traffic": {
+      "name": "Background traffic fraction",
+      "level": "assumed",
+      "source": "Planner assumes 15%; SUMO has zero background vehicles",
+      "description": "Explicit mismatch between forecast model and execution.",
+      "validation_status": "unvalidated",
+      "spatial_scope": "",
+      "temporal_scope": "",
+      "limitations": [
+        "No background fleet in SUMO",
+        "Real background unknown"
+      ]
+    }
+  },
+  "calibration_targets": [
+    {
+      "name": "Background traffic fraction",
+      "current_value": "0.15",
+      "current_basis": "assumed",
+      "required_evidence": "Observed link flows or OD survey to estimate non-modeled vehicles",
+      "target_metric": "Background fraction within 5% of observed saturation gap",
+      "achieved": false,
+      "notes": "Now defaults to 0.0 in code; set >0 only with evidence"
+    },
+    {
+      "name": "Signal timing parameters",
+      "current_value": "60s cycle, SUMO defaults",
+      "current_basis": "synthetic",
+      "required_evidence": "Bengaluru BTMC signal timing plans or field-measured phase splits",
+      "target_metric": "Green time within 10% of observed at calibrated junctions",
+      "achieved": false,
+      "notes": ""
+    },
+    {
+      "name": "Car-following behaviour",
+      "current_value": "Krauss defaults",
+      "current_basis": "assumed",
+      "required_evidence": "Trajectory data or queue discharge rate measurements",
+      "target_metric": "Queue discharge headway within 0.5s of observed mean",
+      "achieved": false,
+      "notes": ""
+    },
+    {
+      "name": "Demand pattern",
+      "current_value": "Synthetic boundary anchors",
+      "current_basis": "synthetic",
+      "required_evidence": "OD survey, ATCC data, or Bluetooth/Wi-Fi re-identification",
+      "target_metric": "Link-flow MAE < 20% against observed counts",
+      "achieved": false,
+      "notes": ""
+    },
+    {
+      "name": "Link travel time",
+      "current_value": "Free-flow from OSM speed limits",
+      "current_basis": "assumed",
+      "required_evidence": "Probe vehicle data, Google/TomTom API, or floating car surveys",
+      "target_metric": "MAPE < 15% on validation corridors",
+      "achieved": false,
+      "notes": ""
+    },
+    {
+      "name": "ETA prediction (Bengaluru)",
+      "current_value": "5.14 min MAE on Chengdu only",
+      "current_basis": "unknown",
+      "required_evidence": "Bengaluru trip time observations for training and held-out testing",
+      "target_metric": "10% relative MAE improvement over strong baselines on Bengaluru data",
+      "achieved": false,
+      "notes": "Chengdu MAE is not transferable; Bengaluru claims require Bengaluru validation"
+    }
+  ],
+  "summary": {
+    "observed_items": 2,
+    "assumed_items": 5,
+    "calibrated_targets": 0,
+    "total_targets": 6
+  }
+}

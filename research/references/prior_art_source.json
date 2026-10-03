@@ -1,0 +1,23 @@
+{
+  "title": "Proactive Vehicle Re-routing Strategies for Congestion Avoidance",
+  "authors": "Juan (Susan) Pan, Mohammad A. Khan, Iulian Sandu Popa, Karine Zeitouni, Cristian Borcea",
+  "venue": "IEEE DCOSS 2012",
+  "doi": "10.1109/DCOSS.2012.29",
+  "url": "https://web.njit.edu/~borcea/papers/dcoss12.pdf",
+  "retrieval_date": "2026-10-01",
+  "pdf_sha256": "4e790708f62c971ced72d43a27b93e1f3c80f97587b030578d0d600d0f13176a",
+  "implementation_scope": "Greenshields current costs and DSP/RkSP/EBkSP selector adaptations; not full published rerouting system",
+  "formula_check": {
+    "figure": 1,
+    "entropy_rounded": [
+      1.49,
+      1.16,
+      0.58
+    ]
+  },
+  "differences": [
+    "Frozen six free-flow paths, then up to three current-cost paths",
+    "Departure-only intervention; no periodic upstream urgency selection",
+    "Mixed assumed vehicles and uncalibrated Bengaluru networks"
+  ]
+}

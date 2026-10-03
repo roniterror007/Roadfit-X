@@ -1,7 +1,7 @@
 """
 RoadFit-X: Pareto Route Candidate Generator (Refactored Phase 2)
 -----------------------------------------------------------------
-Retrieves K shortest physically feasible candidate paths.
+Retrieves up to K modeled feasible candidate paths.
 Instead of flattening the MultiDiGraph and using Yen's algorithm, this now
 directly leverages the multi-label constrained A* router which natively
 returns a Pareto frontier of non-dominated paths.
@@ -29,7 +29,7 @@ def get_k_shortest_paths(
     traffic_level: str = 'normal',
 ) -> list:
     """
-    Find K Pareto-optimal paths via Multi-Label Constrained A*.
+    Find up to K nondominated search candidates; the cap may truncate the frontier.
     Returns a list of path_node lists to maintain the same API signature
     as the old Yen's implementation for downstream CVaR optimizer.
     """

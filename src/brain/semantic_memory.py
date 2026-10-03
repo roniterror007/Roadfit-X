@@ -5,6 +5,7 @@ import joblib
 import networkx as nx
 import os
 from typing import Dict, Any, List, Tuple
+from src.vehicle.geometry_constraints import _parse_osm_float
 
 class SemanticKnowledgeEngine:
     """
@@ -12,7 +13,7 @@ class SemanticKnowledgeEngine:
     Uses Machine Learning (Random Forest) to learn WHY edges fail from the 
     Episodic Memory, and predicts failure on completely unseen edges.
     """
-    def __init__(self, model_path="semantic_model.joblib"):
+    def __init__(self, model_path=None):
         self.model_path = model_path
         self.model = None
         self.highway_encoding = {
@@ -20,13 +21,14 @@ class SemanticKnowledgeEngine:
             'tertiary': 5, 'unclassified': 6, 'residential': 7, 'service': 8,
             'living_street': 9, 'pedestrian': 10
         }
-        self.weather_encoding = {'clear': 0, 'rain': 1, 'storm': 2}
-        self.traffic_encoding = {'low': 0, 'peak': 1}
+        self.weather_encoding = {'clear': 0, 'rain': 1, 'storm': 2, 'none': 0,
+                                 'light': 1, 'moderate': 1, 'heavy': 2, 'extreme': 2}
+        self.traffic_encoding = {'low': 0, 'normal': 0, 'peak': 1, 'heavy': 1, 'gridlock': 1}
         
         self.load_model()
 
     def load_model(self):
-        if os.path.exists(self.model_path):
+        if self.model_path and os.path.exists(self.model_path):
             try:
                 self.model = joblib.load(self.model_path)
             except Exception as e:
@@ -35,7 +37,7 @@ class SemanticKnowledgeEngine:
 
     def _extract_features(self, data: dict, weather: str, traffic: str) -> List[float]:
         """Converts graph edge data and context into an ML feature vector."""
-        width = float(data.get('width', data.get('_width_mean', 3.0)))
+        width = _parse_osm_float(data.get('width', data.get('_width_mean')), 3.0)
         length = float(data.get('length', 10.0))
         
         speed_raw = data.get('speed_kph', data.get('maxspeed', 25.0))
@@ -61,6 +63,9 @@ class SemanticKnowledgeEngine:
         In a production environment, this would call Google Earth Engine and Mapbox.
         """
         import random
+        import hashlib
+        seed = int.from_bytes(hashlib.sha256(f'{highway_type}:{width}:{length}'.encode()).digest()[:8], 'big')
+        random = random.Random(seed)
         # Base distributions on highway type
         if highway_type in ['residential', 'living_street']:
             housing_density = random.normalvariate(50.0, 10.0) # Dense housing
@@ -89,7 +94,7 @@ class SemanticKnowledgeEngine:
         REM Sleep Consolidation: Extracts all raw experiences from Episodic Memory
         and trains a generalized Random Forest classifier.
         """
-        print("🧠 Initiating Semantic Memory Consolidation (Deep Sleep ML Training)...")
+        print('Starting semantic memory consolidation from simulated experiences...')
         conn = sqlite3.connect(db_path)
         c = conn.cursor()
         c.execute('SELECT edge_id, weather, traffic, success FROM experiences')
@@ -98,7 +103,7 @@ class SemanticKnowledgeEngine:
 
         if not rows:
             print("  [!] Episodic memory is empty. Nothing to consolidate.")
-            return
+            raise ValueError('Episodic memory is empty; no model was trained.')
 
         X = []
         y = []
@@ -122,7 +127,7 @@ class SemanticKnowledgeEngine:
 
         if not X:
             print("  [!] No valid features could be extracted.")
-            return
+            raise ValueError('No valid training features; no model was trained.')
 
         print(f"  [+] Extracting {len(X)} experiences for ML training ({missing} skipped).")
         
@@ -130,8 +135,9 @@ class SemanticKnowledgeEngine:
         self.model = RandomForestClassifier(n_estimators=50, max_depth=10, random_state=42)
         self.model.fit(X, y)
         
-        joblib.dump(self.model, self.model_path)
-        print(f"🧠 Consolidation complete. Semantic Model saved to {self.model_path}.")
+        if self.model_path:
+            joblib.dump(self.model, self.model_path)
+        print(f"Consolidation complete. Semantic model destination: {self.model_path}.")
 
     def predict_failure_probability(self, data: dict, weather: str, traffic: str) -> float:
         """

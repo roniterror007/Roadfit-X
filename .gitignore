@@ -7,6 +7,7 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 .venv/
+.venv-validation/
 venv/
 
 # Environment and secrets
@@ -37,3 +38,20 @@ Thumbs.db
 # Local data caches
 cache/
 *.log
+*.db-shm
+*.db-wal
+.local/
+tmp/
+output/
+experiments/
+data/
+
+# Data and large files
+*.png
+*.jpg
+*.jpeg
+*.db
+*.csv
+*.joblib
+*.zip
+*.tar.gz

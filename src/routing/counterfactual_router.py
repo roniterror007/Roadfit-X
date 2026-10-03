@@ -17,11 +17,12 @@ def generate_route_explanation(
     explanations = []
 
     # 1. Physical limits — tight lateral clearance
-    min_clearance = route_stats.get('min_clearance_m', 10)
+    min_clearance = route_stats.get('min_clearance_m')
+    min_clearance = min_clearance if min_clearance is not None else float('inf')
     if min_clearance < 0.2:
         explanations.append(
             f"Route selected despite tight lateral clearance "
-            f"({min_clearance:.2f}m). Alternative routes added 15+ minutes."
+            f"({min_clearance:.2f}m in the selected model)."
         )
     elif min_clearance < 0.5:
         explanations.append(
@@ -37,8 +38,8 @@ def generate_route_explanation(
         if uncertainty_fraction > 0.5:
             explanations.append(
                 f"High uncertainty on this route: "
-                f"{uncertainty_fraction*100:.0f}% of the distance relies on "
-                f"unverified OSM road widths. Consider local confirmation."
+                f"mean modeled uncertainty is {uncertainty_fraction:.2f}. "
+                f"This score is not a measured fraction of missing road widths."
             )
 
     # 3. Completion probability (Poisson survival)

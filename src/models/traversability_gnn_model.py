@@ -34,10 +34,11 @@ class ExpectedCalibrationError(nn.Module):
     """
     def __init__(self, n_bins=10):
         super().__init__()
+        if torch is None:
+            raise ImportError('This research scaffold requires torch and torch_geometric; it is not a trained model.')
         self.n_bins = n_bins
 
     def forward(self, confidences, labels):
-        if torch is None: return 0.0
         
         bin_boundaries = torch.linspace(0, 1, self.n_bins + 1)
         ece = torch.zeros(1, device=confidences.device)
@@ -62,12 +63,13 @@ class CalibratedSurvivalLoss(nn.Module):
     """
     def __init__(self, lambda_cal=0.1):
         super().__init__()
+        if torch is None:
+            raise ImportError('This research scaffold requires torch and torch_geometric; it is not a trained model.')
         self.bce = nn.BCELoss()
         self.ece = ExpectedCalibrationError()
         self.lambda_cal = lambda_cal
 
     def forward(self, lambda_e_pred, edge_lengths, y_true):
-        if torch is None: return 0.0
         
         # Convert hazard rate (lambda_e) to survival probability (p_e)
         # p_e = exp(-lambda_e * L_e)
@@ -93,7 +95,8 @@ class TraversabilityEGAT(nn.Module):
     def __init__(self, node_in_dim, edge_in_dim, vehicle_dim, hidden_dim=64, num_heads=4):
         super().__init__()
         
-        if torch is None: return
+        if torch is None:
+            raise ImportError('This research scaffold requires torch and torch_geometric; it is not a trained model.')
         
         # Encoders
         self.node_encoder = nn.Linear(node_in_dim, hidden_dim)

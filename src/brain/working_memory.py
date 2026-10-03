@@ -19,7 +19,7 @@ class WorkingMemory:
         """
         expiry = time.time() + ttl_seconds
         self._cache[edge_id] = (severity, expiry)
-        print(f"🚨 Working Memory: Live hazard reported on {edge_id} (Severity {severity:.2f}). Expires in {ttl_seconds}s.")
+        print(f"Working memory: hazard on {edge_id} (severity {severity:.2f}), TTL {ttl_seconds}s.")
 
     def get_live_penalty(self, edge_id: str) -> float:
         """

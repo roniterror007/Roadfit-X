@@ -1,0 +1,1075 @@
+{
+  "episodes": 80,
+  "policy_runs": 800,
+  "means": {
+    "dsp": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 597.7375,
+      "penalized_mean_s": 633.6739722222222,
+      "mean_time_s": 626.2311269123783,
+      "p90_time_s": 866.6274999999999,
+      "mean_depart_delay_s": 0.41312499999999996,
+      "local_distance_km": 397.26656325,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 5.102498731252854,
+      "assignment_pct": 100.0,
+      "arrival_pct": 99.7486111111111,
+      "local_m_per_request": 659.5615211111111
+    },
+    "ebksp": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 579.7375,
+      "penalized_mean_s": 692.9850833333333,
+      "mean_time_s": 626.283709148968,
+      "p90_time_s": 873.075,
+      "mean_depart_delay_s": 0.508375,
+      "local_distance_km": 402.27880725,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 5.811620851242333,
+      "assignment_pct": 100.0,
+      "arrival_pct": 97.7486111111111,
+      "local_m_per_request": 668.1432433333333
+    },
+    "rksp": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 530.2,
+      "penalized_mean_s": 853.5502916666667,
+      "mean_time_s": 626.264787481837,
+      "p90_time_s": 861.8675,
+      "mean_depart_delay_s": 3.0971249999999997,
+      "local_distance_km": 400.513181875,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 6.321088599997165,
+      "assignment_pct": 100.0,
+      "arrival_pct": 92.24444444444444,
+      "local_m_per_request": 665.6970940277778
+    },
+    "roadfit": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 580.2125,
+      "arrived": 567.2,
+      "penalized_mean_s": 717.2306249999999,
+      "mean_time_s": 610.1536037199528,
+      "p90_time_s": 840.595,
+      "mean_depart_delay_s": 1.0775419463177234,
+      "local_distance_km": 373.057824875,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 6.506292971251241,
+      "assignment_pct": 97.8013888888889,
+      "arrival_pct": 96.35555555555555,
+      "local_m_per_request": 627.9140581944445
+    },
+    "roadfit_graduated": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 585.6875,
+      "penalized_mean_s": 667.3403055555556,
+      "mean_time_s": 620.0250040008661,
+      "p90_time_s": 856.29125,
+      "mean_depart_delay_s": 0.812375,
+      "local_distance_km": 392.48226612499997,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 6.547043265000684,
+      "assignment_pct": 100.0,
+      "arrival_pct": 98.40972222222221,
+      "local_m_per_request": 649.4967706944444
+    },
+    "roadfit_no_future": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 533.8,
+      "arrived": 533.8,
+      "penalized_mean_s": 818.9491388888889,
+      "mean_time_s": 585.4450830684113,
+      "p90_time_s": 803.0825,
+      "mean_depart_delay_s": 0.35847661293163047,
+      "local_distance_km": 328.69228562499995,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 5.533722597494489,
+      "assignment_pct": 92.1888888888889,
+      "arrival_pct": 92.1888888888889,
+      "local_m_per_request": 573.9857518055555
+    },
+    "roadfit_no_locality": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 581.7125,
+      "penalized_mean_s": 681.3915972222222,
+      "mean_time_s": 621.4693750357931,
+      "p90_time_s": 861.0725,
+      "mean_depart_delay_s": 1.0306805555555556,
+      "local_distance_km": 394.5026795,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 6.643433113749779,
+      "assignment_pct": 100.0,
+      "arrival_pct": 97.96805555555555,
+      "local_m_per_request": 652.9452133333333
+    },
+    "roadfit_queue_aware": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 575.4875,
+      "penalized_mean_s": 702.5661527777777,
+      "mean_time_s": 622.4423562261234,
+      "p90_time_s": 854.9725000000001,
+      "mean_depart_delay_s": 2.8717777777777775,
+      "local_distance_km": 393.44745387499995,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 7.068397901247954,
+      "assignment_pct": 100.0,
+      "arrival_pct": 97.27638888888889,
+      "local_m_per_request": 650.7993093055555
+    },
+    "roadfit_soft_locality": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 585.6875,
+      "penalized_mean_s": 667.3403055555556,
+      "mean_time_s": 620.0250040008661,
+      "p90_time_s": 856.29125,
+      "mean_depart_delay_s": 0.812375,
+      "local_distance_km": 392.48226612499997,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 6.585806462499022,
+      "assignment_pct": 100.0,
+      "arrival_pct": 98.40972222222221,
+      "local_m_per_request": 649.4967706944444
+    },
+    "static": {
+      "seed": 63.0,
+      "trips": 600.0,
+      "adoption": 0.85,
+      "assigned": 600.0,
+      "arrived": 600.0,
+      "penalized_mean_s": 632.7376944444444,
+      "mean_time_s": 632.7376944444444,
+      "p90_time_s": 886.425,
+      "mean_depart_delay_s": 0.3628611111111111,
+      "local_distance_km": 399.3730025,
+      "collision_vehicle_events": 0.0,
+      "teleport_events": 0.0,
+      "wall_seconds": 5.072538093749609,
+      "assignment_pct": 100.0,
+      "arrival_pct": 100.0,
+      "local_m_per_request": 663.9201294444445
+    }
+  },
+  "per_region": {
+    "Hebbal": {
+      "dsp": 663.74675,
+      "ebksp": 666.6565277777778,
+      "rksp": 761.7994444444445,
+      "roadfit": 731.0398888888889,
+      "roadfit_graduated": 654.9646666666666,
+      "roadfit_no_future": 915.9866944444444,
+      "roadfit_no_locality": 657.3521388888889,
+      "roadfit_queue_aware": 657.2749166666666,
+      "roadfit_soft_locality": 654.9646666666666,
+      "static": 671.3118888888889
+    },
+    "Indiranagar": {
+      "dsp": 603.6011944444444,
+      "ebksp": 719.3136388888889,
+      "rksp": 945.3011388888888,
+      "roadfit": 703.4213611111111,
+      "roadfit_graduated": 679.7159444444444,
+      "roadfit_no_future": 721.9115833333333,
+      "roadfit_no_locality": 705.4310555555555,
+      "roadfit_queue_aware": 747.8573888888889,
+      "roadfit_soft_locality": 679.7159444444444,
+      "static": 594.1635
+    }
+  },
+  "per_load": {
+    "300": {
+      "dsp": 558.9583333333333,
+      "ebksp": 560.35925,
+      "rksp": 561.4205833333333,
+      "roadfit": 556.9079166666667,
+      "roadfit_graduated": 556.9079166666667,
+      "roadfit_no_future": 596.5955,
+      "roadfit_no_locality": 556.9349166666667,
+      "roadfit_queue_aware": 557.01525,
+      "roadfit_soft_locality": 556.9079166666667,
+      "static": 559.0386666666666
+    },
+    "900": {
+      "dsp": 708.3896111111111,
+      "ebksp": 825.6109166666668,
+      "rksp": 1145.6799999999998,
+      "roadfit": 877.5533333333333,
+      "roadfit_graduated": 777.7726944444445,
+      "roadfit_no_future": 1041.3027777777777,
+      "roadfit_no_locality": 805.8482777777779,
+      "roadfit_queue_aware": 848.1170555555557,
+      "roadfit_soft_locality": 777.7726944444445,
+      "static": 706.4367222222222
+    }
+  },
+  "vehicle_diagnostics": [
+    {
+      "region": "Hebbal",
+      "method": "dsp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 763.0551174496644,
+      "planned_local_m_per_request": 889.9543389261745
+    },
+    {
+      "region": "Hebbal",
+      "method": "dsp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 768.8669971086327,
+      "planned_local_m_per_request": 904.1325815778604
+    },
+    {
+      "region": "Hebbal",
+      "method": "dsp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.042570951585976,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "ebksp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 766.9918624161074,
+      "planned_local_m_per_request": 896.1925469798658
+    },
+    {
+      "region": "Hebbal",
+      "method": "ebksp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 773.5972738537795,
+      "planned_local_m_per_request": 912.5770570012393
+    },
+    {
+      "region": "Hebbal",
+      "method": "ebksp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.054257095158597,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "rksp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.09395973154362,
+      "capped_request_mean_s": 927.8708053691275,
+      "planned_local_m_per_request": 896.8865318791945
+    },
+    {
+      "region": "Hebbal",
+      "method": "rksp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.24824452705494,
+      "capped_request_mean_s": 928.8929161503511,
+      "planned_local_m_per_request": 913.0915561751341
+    },
+    {
+      "region": "Hebbal",
+      "method": "rksp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.04966611018364,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 96.51006711409396,
+      "arrived_pct": 96.51006711409396,
+      "capped_request_mean_s": 827.5754194630872,
+      "planned_local_m_per_request": 834.0491459731544
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 92.69929781082197,
+      "arrived_pct": 92.69929781082197,
+      "capped_request_mean_s": 942.901590251962,
+      "planned_local_m_per_request": 817.3744795539034
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.012520868113523,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_graduated",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 749.5198825503355,
+      "planned_local_m_per_request": 878.2068280201341
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_graduated",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 756.1685254027261,
+      "planned_local_m_per_request": 896.906497315159
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_graduated",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.0279632721202,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_future",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 83.4731543624161,
+      "arrived_pct": 83.4731543624161,
+      "capped_request_mean_s": 1167.1109060402684,
+      "planned_local_m_per_request": 700.1285419463088
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_future",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 84.71705906650145,
+      "arrived_pct": 84.71705906650145,
+      "capped_request_mean_s": 1138.3089632383312,
+      "planned_local_m_per_request": 731.1069599339116
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_future",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.023789649415694,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_locality",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 753.6109899328859,
+      "planned_local_m_per_request": 884.104552852349
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_locality",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 759.8525402726146,
+      "planned_local_m_per_request": 903.5286358942584
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_no_locality",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.036727879799667,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_queue_aware",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 753.4726510067114,
+      "planned_local_m_per_request": 879.9511669463087
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_queue_aware",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 759.8378769103676,
+      "planned_local_m_per_request": 898.8554078893019
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_queue_aware",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.031302170283805,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_soft_locality",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 749.5198825503355,
+      "planned_local_m_per_request": 878.2068280201341
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_soft_locality",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 756.1685254027261,
+      "planned_local_m_per_request": 896.906497315159
+    },
+    {
+      "region": "Hebbal",
+      "method": "roadfit_soft_locality",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.0279632721202,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Hebbal",
+      "method": "static",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 775.1785234899329,
+      "planned_local_m_per_request": 915.3724026845637
+    },
+    {
+      "region": "Hebbal",
+      "method": "static",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 781.6588186699711,
+      "planned_local_m_per_request": 927.1624783147461
+    },
+    {
+      "region": "Hebbal",
+      "method": "static",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 24.046744574290486,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "dsp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 99.16107382550335,
+      "capped_request_mean_s": 705.1727348993288,
+      "planned_local_m_per_request": 560.427562080537
+    },
+    {
+      "region": "Indiranagar",
+      "method": "dsp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 99.1635687732342,
+      "capped_request_mean_s": 711.8799049979348,
+      "planned_local_m_per_request": 592.4362742668318
+    },
+    {
+      "region": "Indiranagar",
+      "method": "dsp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 129.83764607679467,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "ebksp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 92.6006711409396,
+      "capped_request_mean_s": 893.1403523489932,
+      "planned_local_m_per_request": 571.550822147651
+    },
+    {
+      "region": "Indiranagar",
+      "method": "ebksp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 92.36885584469228,
+      "capped_request_mean_s": 908.419248244527,
+      "planned_local_m_per_request": 604.0280256092524
+    },
+    {
+      "region": "Indiranagar",
+      "method": "ebksp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 129.90233722871452,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "rksp",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 80.46140939597315,
+      "capped_request_mean_s": 1251.9631711409395,
+      "planned_local_m_per_request": 564.116302852349
+    },
+    {
+      "region": "Indiranagar",
+      "method": "rksp",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 81.79471292854193,
+      "capped_request_mean_s": 1220.9482651796777,
+      "planned_local_m_per_request": 597.2245074349443
+    },
+    {
+      "region": "Indiranagar",
+      "method": "rksp",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 90.35893155258765,
+      "capped_request_mean_s": 467.95534223706176,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 98.8758389261745,
+      "arrived_pct": 93.73322147651007,
+      "capped_request_mean_s": 851.7630033557047,
+      "planned_local_m_per_request": 546.0108313758388
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 96.6336224700537,
+      "arrived_pct": 92.58570838496489,
+      "capped_request_mean_s": 891.2458694754234,
+      "planned_local_m_per_request": 565.7637959520858
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 98.49749582637729,
+      "capped_request_mean_s": 182.67237061769617,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_graduated",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.85738255033557,
+      "capped_request_mean_s": 827.8656879194631,
+      "planned_local_m_per_request": 551.9556996644295
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_graduated",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.75423378769104,
+      "capped_request_mean_s": 836.7835605121851,
+      "planned_local_m_per_request": 585.0269971086327
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_graduated",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 98.9983305509182,
+      "capped_request_mean_s": 165.50792988313856,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_future",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 91.18288590604027,
+      "arrived_pct": 91.18288590604027,
+      "capped_request_mean_s": 900.648322147651,
+      "planned_local_m_per_request": 487.5457332214765
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_future",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 91.7905824039653,
+      "arrived_pct": 91.7905824039653,
+      "capped_request_mean_s": 888.747521685254,
+      "planned_local_m_per_request": 522.3322686906237
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_future",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 129.70784641068448,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_locality",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 93.25503355704699,
+      "capped_request_mean_s": 873.5305369127517,
+      "planned_local_m_per_request": 553.2737407718121
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_locality",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 93.58736059479554,
+      "capped_request_mean_s": 871.276848409748,
+      "planned_local_m_per_request": 586.2137329615861
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_no_locality",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 98.41402337228715,
+      "capped_request_mean_s": 185.63480801335558,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_queue_aware",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 91.30872483221476,
+      "capped_request_mean_s": 930.8260906040268,
+      "planned_local_m_per_request": 553.6277147651007
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_queue_aware",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 92.2759190417183,
+      "capped_request_mean_s": 908.4517761255679,
+      "planned_local_m_per_request": 586.8463723667905
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_queue_aware",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 92.6126878130217,
+      "capped_request_mean_s": 386.58597662771285,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_soft_locality",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.85738255033557,
+      "capped_request_mean_s": 827.8656879194631,
+      "planned_local_m_per_request": 551.9556996644295
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_soft_locality",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 94.75423378769104,
+      "capped_request_mean_s": 836.7835605121851,
+      "planned_local_m_per_request": 585.0269971086327
+    },
+    {
+      "region": "Indiranagar",
+      "method": "roadfit_soft_locality",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 98.9983305509182,
+      "capped_request_mean_s": 165.50792988313856,
+      "planned_local_m_per_request": 0.0
+    },
+    {
+      "region": "Indiranagar",
+      "method": "static",
+      "kind": "hatchback",
+      "requests": 11920,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 685.9981543624161,
+      "planned_local_m_per_request": 543.5946208053691
+    },
+    {
+      "region": "Indiranagar",
+      "method": "static",
+      "kind": "motorcycle",
+      "requests": 9684,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 700.6272201569599,
+      "planned_local_m_per_request": 576.240380008261
+    },
+    {
+      "region": "Indiranagar",
+      "method": "static",
+      "kind": "truck",
+      "requests": 2396,
+      "assigned_pct": 100.0,
+      "arrived_pct": 100.0,
+      "capped_request_mean_s": 129.75208681135226,
+      "planned_local_m_per_request": 0.0
+    }
+  ],
+  "incomplete_policy_runs": 172,
+  "unassigned_requests": 6879,
+  "unfinished_assigned_requests": 14141,
+  "contrasts": {
+    "roadfit_minus_static": {
+      "mean_delta_s": 84.49293055555555,
+      "seed_cluster_95ci_s": [
+        50.03489409722222,
+        128.0615118055555
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -12.024381798874305
+    },
+    "roadfit_minus_dsp": {
+      "mean_delta_s": 83.55665277777777,
+      "seed_cluster_95ci_s": [
+        40.1536378472222,
+        133.16117118055556
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -12.53602256887007
+    },
+    "roadfit_minus_rksp": {
+      "mean_delta_s": -136.31966666666665,
+      "seed_cluster_95ci_s": [
+        -228.77354652777777,
+        -47.11676354166669
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 6.730351362847307
+    },
+    "roadfit_minus_ebksp": {
+      "mean_delta_s": 24.24554166666666,
+      "seed_cluster_95ci_s": [
+        -37.88988506944445,
+        81.1389583333333
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -5.691916332311285
+    },
+    "roadfit_minus_roadfit_no_future": {
+      "mean_delta_s": -101.71851388888889,
+      "seed_cluster_95ci_s": [
+        -162.92689270833336,
+        -31.77937361111113
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 10.006634762005712
+    },
+    "roadfit_minus_roadfit_no_locality": {
+      "mean_delta_s": 35.83902777777778,
+      "seed_cluster_95ci_s": [
+        -25.246845833333335,
+        87.88241527777777
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -7.03443611626958
+    },
+    "roadfit_soft_locality_minus_static": {
+      "mean_delta_s": 34.6026111111111,
+      "seed_cluster_95ci_s": [
+        -8.573062152777771,
+        81.91549965277777
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -5.046860417243977
+    },
+    "roadfit_soft_locality_minus_dsp": {
+      "mean_delta_s": 33.666333333333334,
+      "seed_cluster_95ci_s": [
+        -12.767825694444452,
+        84.17083333333335
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -5.497459125365858
+    },
+    "roadfit_soft_locality_minus_rksp": {
+      "mean_delta_s": -186.20998611111108,
+      "seed_cluster_95ci_s": [
+        -274.3106177083333,
+        -108.97908472222221
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 11.495290117767913
+    },
+    "roadfit_soft_locality_minus_ebksp": {
+      "mean_delta_s": -25.64477777777778,
+      "seed_cluster_95ci_s": [
+        -51.07527187500002,
+        2.687020138888885
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 1.3692924068291594
+    },
+    "roadfit_soft_locality_minus_roadfit": {
+      "mean_delta_s": -49.890319444444444,
+      "seed_cluster_95ci_s": [
+        -85.009434375,
+        -1.3515277777777823
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 4.898194771915841
+    },
+    "roadfit_soft_locality_minus_roadfit_no_locality": {
+      "mean_delta_s": -14.051291666666666,
+      "seed_cluster_95ci_s": [
+        -53.944916666666686,
+        14.755722916666663
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 0.18314318726279183
+    },
+    "roadfit_graduated_minus_static": {
+      "mean_delta_s": 34.6026111111111,
+      "seed_cluster_95ci_s": [
+        -8.312499999999998,
+        81.72546319444444
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -5.046860417243977
+    },
+    "roadfit_graduated_minus_dsp": {
+      "mean_delta_s": 33.666333333333334,
+      "seed_cluster_95ci_s": [
+        -11.398569097222236,
+        85.04786180555557
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -5.497459125365858
+    },
+    "roadfit_graduated_minus_rksp": {
+      "mean_delta_s": -186.20998611111108,
+      "seed_cluster_95ci_s": [
+        -274.26246041666667,
+        -109.75411111111111
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 11.495290117767913
+    },
+    "roadfit_graduated_minus_ebksp": {
+      "mean_delta_s": -25.64477777777778,
+      "seed_cluster_95ci_s": [
+        -51.06181666666668,
+        2.9475895833333263
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 1.3692924068291594
+    },
+    "roadfit_graduated_minus_roadfit": {
+      "mean_delta_s": -49.890319444444444,
+      "seed_cluster_95ci_s": [
+        -85.57046215277778,
+        -1.748529861111116
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 4.898194771915841
+    },
+    "roadfit_graduated_minus_roadfit_soft_locality": {
+      "mean_delta_s": 0.0,
+      "seed_cluster_95ci_s": [
+        0.0,
+        0.0
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 0.0
+    },
+    "roadfit_queue_aware_minus_static": {
+      "mean_delta_s": 69.82845833333333,
+      "seed_cluster_95ci_s": [
+        13.017958333333333,
+        135.0197583333333
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -10.296834688113034
+    },
+    "roadfit_queue_aware_minus_dsp": {
+      "mean_delta_s": 68.89218055555554,
+      "seed_cluster_95ci_s": [
+        12.450229861111103,
+        133.90121249999996
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -10.42997416082256
+    },
+    "roadfit_queue_aware_minus_rksp": {
+      "mean_delta_s": -150.98413888888888,
+      "seed_cluster_95ci_s": [
+        -197.80912291666667,
+        -104.23116354166666
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 10.140246142097197
+    },
+    "roadfit_queue_aware_minus_ebksp": {
+      "mean_delta_s": 9.581069444444427,
+      "seed_cluster_95ci_s": [
+        -34.932748263888904,
+        53.335013888888824
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -3.887637058680011
+    },
+    "roadfit_queue_aware_minus_roadfit": {
+      "mean_delta_s": -14.664472222222233,
+      "seed_cluster_95ci_s": [
+        -60.17868715277779,
+        33.58377777777777
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": 0.252417271228082
+    },
+    "roadfit_queue_aware_minus_roadfit_soft_locality": {
+      "mean_delta_s": 35.22584722222221,
+      "seed_cluster_95ci_s": [
+        -7.820149652777789,
+        83.52808819444442
+      ],
+      "clusters": 10,
+      "mean_relative_reduction_pct": -8.537216841614669
+    }
+  },
+  "actuated_minus_static_signal_under_static_routing": {
+    "mean_delta_s": -6.379166666666689,
+    "seed_cluster_95ci_s": [
+      -10.915329166666696,
+      -1.0104000000000188
+    ],
+    "clusters": 10,
+    "mean_relative_reduction_pct": 0.9386014229687996
+  },
+  "collision_vehicle_events": 0,
+  "teleports": 0,
+  "analysis_source_sha256": "adaf4b71b93fd745b8eed39ea3cee5ca279201ad31fc6875d6e585487a264931",
+  "episodes_sha256": "f56f00231e180839d561955997368758d5f31d480ed88d4a01c93d01f887a364",
+  "limitation": "Ten region-seed clusters, two uncalibrated regional networks. Departure-only adaptations, not full published experiment reproductions."
+}

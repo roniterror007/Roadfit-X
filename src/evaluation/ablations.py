@@ -1,319 +1,347 @@
-"""
-RoadFit-X Evaluation: Ablations and Benchmarks
-----------------------------------------------
-Runs the validation protocol baselines (B0 to B3 and RoadFit-X) 
-and computes academic metrics (ISER, CNME, MDEF, TRR, ETTP).
-"""
-import networkx as nx
-import math
-import random
-import csv
-import time
-import sys
+"""Paired reproducible synthetic ablations. Never evaluates imputation as truth."""
 import argparse
+import csv
+import hashlib
+import importlib.metadata
+import json
+import os
+import platform
+import random
+import subprocess
+import time
+from concurrent.futures import ProcessPoolExecutor, as_completed
+from dataclasses import asdict, replace
+from pathlib import Path
+import networkx as nx
+import numpy as np
 import osmnx as ox
 
+from src.data.enrich_graph import synthetic_benchmark_graphs
+from src.evaluation.baseline_routes import route_baseline, prepare_baseline
+from src.evaluation.metrics_engine import MetricsEngine, METRIC_FIELDS
+from src.routing.risk_aware_router import (
+    SearchConfig, RoutingSearchLimit, route_risk_aware, prepare_search,
+    _physics_travel_time, haversine_admissible_heuristic)
 from src.vehicle.vehicle_digital_twin import VehicleDigitalTwin
-from src.evaluation.baseline_routes import (
-    route_shortest_eta,
-    route_hard_constrained_astar
-)
-from src.routing.pareto_candidates import get_k_shortest_paths
-from src.routing.risk_aware_router import route_risk_aware, _compute_path_stats
-from src.evaluation.metrics_engine import MetricsEngine
-from src.brain.cognitive_core import CognitiveCore
+from src.vehicle.geometry_constraints import highway_category
 
-def extract_path_edges(G, path_nodes):
-    path_edges = []
-    if not path_nodes: return []
-    for u, v in zip(path_nodes[:-1], path_nodes[1:]):
-        # Taking the first key just for baselines that don't track keys
-        edge_dict = G[u][v]
-        key = list(edge_dict.keys())[0]
-        data = edge_dict[key]
-        path_edges.append((u, v, key, data))
-    return path_edges
+def benchmark_vehicle(policy='conservative'):
+    return VehicleDigitalTwin(
+        vehicle_type='delivery_van', width_m=2.4, height_m=2.8, gross_weight_t=5.,
+        axle_load_t=2.5, wheelbase_m=3., turning_radius_m=6., ground_clearance_m=.2,
+        max_grade_pct=15., surface_tolerance=['asphalt', 'concrete', 'paved'],
+        rain_tolerance='medium', risk_preference='moderate', unknown_data_policy=policy)
 
-def get_path_travel_time(path_edges) -> float:
-    """Calculates true physical traversal duration in seconds."""
-    total_seconds = 0.0
-    if not path_edges: return 0.0
-    for _, _, _, data in path_edges:
-        length_m = float(data.get('length', 10.0))
-        speed_raw = data.get('speed_kph', data.get('maxspeed', 25.0))
-        if isinstance(speed_raw, list):
-            speed_raw = speed_raw[0]
-        try:
-            speed_kph = float(speed_raw)
-        except (ValueError, TypeError):
-            speed_kph = 25.0
-            
-        speed_mps = max(speed_kph * (1000.0 / 3600.0), 1.0)
-        total_seconds += (length_m / speed_mps)
-    return total_seconds
-
-def run_all_ablations(G: nx.MultiDiGraph, vehicle: VehicleDigitalTwin, orig_node: int, dest_node: int):
-    print("Running Academic Ablations & Metrics Engine...\n")
-    
-    engine = MetricsEngine(vehicle)
-    results = {}
-    
-    # ---------------------------------------------------------
-    # Baseline B0: Unconstrained Dijkstra (ETA only)
-    # ---------------------------------------------------------
-    path_b0 = route_shortest_eta(G, orig_node, dest_node)
-    edges_b0 = extract_path_edges(G, path_b0)
-    t_b0 = get_path_travel_time(edges_b0)
-    
-    if t_b0 <= 0:
-        print("B0 found no feasible route! Cannot compute relative metrics.")
-        return {}
-        
-    res_b0 = engine.evaluate_route(G, path_b0, edges_b0, t_b0, t_b0)
-    results["B0 (Unconstrained)"] = res_b0
-    
-    # ---------------------------------------------------------
-    # Baseline B1: Hard Constrained A*
-    # ---------------------------------------------------------
-    path_b1 = route_hard_constrained_astar(G, orig_node, dest_node, vehicle)
-    edges_b1 = extract_path_edges(G, path_b1)
-    t_b1 = get_path_travel_time(edges_b1)
-    
-    res_b1 = engine.evaluate_route(G, path_b1, edges_b1, t_b1, t_b0)
-    results["B1 (Hard Constrained)"] = res_b1
-    
-    # ---------------------------------------------------------
-    # RoadFit-X: Multi-Label Constrained A* (Phase 3)
-    # ---------------------------------------------------------
-    vehicle.unknown_data_policy = "strict"
-    path_rf_strict, edges_rf_strict, _ = route_risk_aware(G, orig_node, dest_node, vehicle)
-    t_rf_strict = get_path_travel_time(edges_rf_strict)
-    if edges_rf_strict:
-        res_rfs = engine.evaluate_route(G, path_rf_strict, edges_rf_strict, t_rf_strict, t_b0)
-        results["RoadFit-X (Strict)"] = res_rfs
-    else:
-        # If strict policy completely fails
-        results["RoadFit-X (Strict)"] = {'ISER_%': 0.0, 'CNME_%': 0.0, 'MDEF_%': 0.0, 'TRR': 0.0, 'ETTP_%': 0.0}
-
-    vehicle.unknown_data_policy = "conservative"
-    path_rf_cons, edges_rf_cons, _ = route_risk_aware(G, orig_node, dest_node, vehicle)
-    t_rf_cons = get_path_travel_time(edges_rf_cons)
-    if edges_rf_cons:
-        res_rfc = engine.evaluate_route(G, path_rf_cons, edges_rf_cons, t_rf_cons, t_b0)
-        results["RoadFit-X (Conservative)"] = res_rfc
-        
-    vehicle.unknown_data_policy = "exploratory"
-    path_rf_exp, edges_rf_exp, _ = route_risk_aware(G, orig_node, dest_node, vehicle)
-    t_rf_exp = get_path_travel_time(edges_rf_exp)
-    if edges_rf_exp:
-        res_rfe = engine.evaluate_route(G, path_rf_exp, edges_rf_exp, t_rf_exp, t_b0)
-        results["RoadFit-X (Exploratory)"] = res_rfe
-        
-    # ---------------------------------------------------------
-    # RoadFit-X: Cognitive Brain (Episodic Memory + Exploratory)
-    # ---------------------------------------------------------
-    # Assuming brain is already trained, we inject its bias for a 'rain' and 'peak' context
-    brain = CognitiveCore()
-    biased_graph = brain.apply_cognitive_bias(G, weather="rain", traffic="peak", vehicle_type=vehicle.vehicle_type)
-    
-    path_rf_brain, edges_rf_brain, _ = route_risk_aware(biased_graph, orig_node, dest_node, vehicle)
-    t_rf_brain = get_path_travel_time(edges_rf_brain)
-    if edges_rf_brain:
-        res_rfb = engine.evaluate_route(biased_graph, path_rf_brain, edges_rf_brain, t_rf_brain, t_b0)
-        results["RoadFit-X (Cognitive Brain)"] = res_rfb
-    
-    # Print Results Matrix
-    print(f"{'Router':<25} | {'ISER %':<8} | {'CNME %':<8} | {'MDEF %':<8} | {'TRR':<6} | {'ETTP %':<8}")
-    print("-" * 75)
-    for name, r in results.items():
-        if r.get('ETTP_%', 0) == 0 and name != "B0 (Unconstrained)" and not r.get('TRR'):
-            print(f"{name:<25} | {'NO PATH':<8} | {'-':<8} | {'-':<8} | {'-':<6} | {'-':<8}")
-        else:
-            ettp = f"+{r.get('ETTP_%'):.2f}" if r.get('ETTP_%', 0) > 0 else f"{r.get('ETTP_%', 0):.2f}"
-            print(f"{name:<25} | {r.get('ISER_%', 0):<8.2f} | {r.get('CNME_%', 0):<8.2f} | {r.get('MDEF_%', 0):<8.2f} | {r.get('TRR', 0):<6.2f} | {ettp:<8}")
-    
-    # We will just return the results dict to the caller
-    return results
-
-def haversine(lat1, lon1, lat2, lon2):
-    R = 6371.0
-    lat1, lon1, lat2, lon2 = map(math.radians, [lat1, lon1, lat2, lon2])
-    dlat = lat2 - lat1
-    dlon = lon2 - lon1
-    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
-    return R * c * 1000.0  # return meters
+def model_specs():
+    full = SearchConfig(exact=True)
+    return [
+        ('B0 ETA', None, 'exploratory', 'eta'),
+        ('B1 Hard constraints', None, 'conservative', 'hard'),
+        ('RF Exact', full, 'conservative', 'search'),
+        ('RF Rounded', replace(full, exact=False), 'conservative', 'search'),
+        ('RF Union bound', replace(full, risk_aggregation='union_bound'), 'conservative', 'search'),
+        ('RF Union rounded', replace(full, exact=False, risk_aggregation='union_bound'), 'conservative', 'search'),
+        ('RF Strict', full, 'strict', 'search'),
+        ('RF Exploratory', full, 'exploratory', 'search'),
+        ('RF -geometry', replace(full, use_geometry=False, use_clearance=False), 'conservative', 'search'),
+        ('RF -hazard', replace(full, use_hazard=False), 'conservative', 'search'),
+        ('RF -uncertainty', replace(full, use_uncertainty=False), 'conservative', 'search'),
+        ('RF -clearance', replace(full, use_clearance=False), 'conservative', 'search'),
+        ('RF -reverse bounds', replace(full, use_reverse_bounds=False), 'conservative', 'search'),
+        ('Oracle Hard constraints', None, 'strict', 'oracle'),
+    ]
 
 def categorize_nodes(G):
-    arterial_nodes = set()
-    residential_nodes = set()
-    arterial_tags = {'primary', 'secondary', 'tertiary', 'trunk', 'primary_link', 'secondary_link', 'tertiary_link', 'trunk_link'}
-    residential_tags = {'residential', 'living_street', 'unclassified'}
-    
+    arterial, residential = set(), set()
     for u, v, data in G.edges(data=True):
-        hw = data.get('highway')
-        if isinstance(hw, list):
-            hw = hw[0]
-        if hw in arterial_tags:
-            arterial_nodes.add(u)
-            arterial_nodes.add(v)
-        elif hw in residential_tags:
-            residential_nodes.add(u)
-            residential_nodes.add(v)
-            
-    # Pure residential nodes shouldn't also be arterial junctions
-    pure_residential = residential_nodes - arterial_nodes
-    return list(arterial_nodes), list(pure_residential)
+        category = highway_category(data)
+        if category in ('primary', 'secondary', 'tertiary', 'trunk', 'motorway'):
+            arterial.update((u, v))
+        elif category in ('residential', 'living_street', 'unclassified', 'service'):
+            residential.update((u, v))
+    return sorted(arterial), sorted(residential-arterial)
 
-def sample_stratified_od_pairs(G, n_art_res=40, n_res_res=40, n_art_art=20):
-    arterial_nodes, pure_res_nodes = categorize_nodes(G)
-    sampled_pairs = []
-    
-    def get_coords(n):
-        return G.nodes[n].get('y', 0), G.nodes[n].get('x', 0)
-    
-    print("Sampling Arterial -> Residential...")
-    while len(sampled_pairs) < n_art_res:
-        u = random.choice(arterial_nodes)
-        v = random.choice(pure_res_nodes)
-        if nx.has_path(G, u, v):
-            sampled_pairs.append((u, v, "Arterial->Residential"))
-            
-    print("Sampling Residential -> Residential (>= 1.5km)...")
-    res_pairs = 0
-    while res_pairs < n_res_res:
-        u = random.choice(pure_res_nodes)
-        v = random.choice(pure_res_nodes)
-        if u != v:
-            lat1, lon1 = get_coords(u)
-            lat2, lon2 = get_coords(v)
-            if haversine(lat1, lon1, lat2, lon2) >= 1500.0:
-                if nx.has_path(G, u, v):
-                    sampled_pairs.append((u, v, "Residential->Residential"))
-                    res_pairs += 1
+def sample_stratified_od_pairs(G, n_art_res=40, n_res_res=40, n_art_art=20, seed=104729):
+    component = max(nx.strongly_connected_components(G), key=len)
+    if len(component) < 2:
+        raise ValueError('graph needs a strongly connected component with at least two nodes')
+    arterial, residential = categorize_nodes(G.subgraph(component))
+    all_nodes = sorted(component)
+    rng = random.Random(seed)
+    requested = [
+        ('Arterial->Residential', arterial, residential, n_art_res),
+        ('Residential->Residential', residential, residential, n_res_res),
+        ('Arterial->Arterial', arterial, arterial, n_art_art),
+    ]
+    pairs, used = [], set()
+    for category, sources, targets, count in requested:
+        for _ in range(count):
+            found = None
+            for _attempt in range(1000):
+                u, v = rng.choice(sources or all_nodes), rng.choice(targets or all_nodes)
+                if u == v or (u, v) in used:
+                    continue
+                if category == 'Residential->Residential':
+                    a, b = G.nodes[u], G.nodes[v]
+                    distance = haversine_admissible_heuristic(a.get('y', 0.), a.get('x', 0.),
+                                                              b.get('y', 0.), b.get('x', 0.), 1.)
+                    if distance < 1500:
+                        continue
+                found = (u, v, category if sources and targets else 'SCC fallback')
+                break
+            if found is None:
+                # Bounded fallback; never hang on a small graph or absent strata.
+                available = [(u, v) for u in all_nodes for v in all_nodes
+                             if u != v and (u, v) not in used] if len(all_nodes) < 100 else None
+                if available is not None:
+                    if not available:
+                        raise ValueError('requested more unique OD pairs than the graph supports')
+                    u, v = rng.choice(available)
+                else:
+                    for _attempt in range(10000):
+                        u, v = rng.sample(all_nodes, 2)
+                        if (u, v) not in used:
+                            break
+                    else:
+                        raise ValueError('could not sample a unique OD pair')
+                found = (u, v, 'SCC fallback')
+            pairs.append(found)
+            used.add(found[:2])
+    rng.shuffle(pairs)
+    return pairs
 
-    print("Sampling Arterial -> Arterial...")
-    art_pairs = 0
-    while art_pairs < n_art_art:
-        u = random.choice(arterial_nodes)
-        v = random.choice(arterial_nodes)
-        if u != v and nx.has_path(G, u, v):
-            sampled_pairs.append((u, v, "Arterial->Arterial"))
-            art_pairs += 1
-            
-    random.shuffle(sampled_pairs)
-    return sampled_pairs
+def extract_path_edges(G, path_nodes):
+    return [(u, v, key, dict(G[u][v][key]))
+            for u, v in zip(path_nodes[:-1], path_nodes[1:])
+            for key in [min(G[u][v], key=lambda k: _physics_travel_time(G[u][v][k]))]] if path_nodes else []
 
-def run_experiment(G, vehicle, num_pairs, output_csv):
-    # Determine split based on requested num_pairs
-    n_art_res = int(0.4 * num_pairs)
-    n_res_res = int(0.4 * num_pairs)
-    n_art_art = num_pairs - n_art_res - n_res_res
-    
-    pairs = sample_stratified_od_pairs(G, n_art_res, n_res_res, n_art_art)
-    
-    records = []
-    models = ["B0 (Unconstrained)", "B1 (Hard Constrained)", "RoadFit-X (Strict)", "RoadFit-X (Conservative)", "RoadFit-X (Exploratory)", "RoadFit-X (Cognitive Brain)"]
-    
-    print(f"Executing {num_pairs} pairs and saving to {output_csv}...\n")
-    
-    for i, (orig, dest, category) in enumerate(pairs, 1):
-        print(f"Evaluating Pair {i}/{num_pairs} ({category}): {orig} -> {dest}")
-        results = run_all_ablations(G, vehicle, orig, dest)
-        
-        for model in models:
-            metrics = results.get(model, {})
-            # If router completely failed or NO PATH
-            if not metrics or metrics.get('ETTP_%') == 0 and not metrics.get('TRR') and model != "B0 (Unconstrained)":
-                feasibility = 0
-                iser, cnme, mdef, trr, ettp, min_c = None, None, None, None, None, None
-            else:
-                feasibility = 1
-                iser = metrics.get('ISER_%', 0)
-                cnme = metrics.get('CNME_%', 0)
-                mdef = metrics.get('MDEF_%', 0)
-                trr = metrics.get('TRR', 0)
-                ettp = metrics.get('ETTP_%', 0)
-                min_c = metrics.get('MinClearance_m', 0)
-                
-            records.append({
-                'PairID': i,
-                'Category': category,
-                'Model': model,
-                'Feasible': feasibility,
-                'ISER_%': iser,
-                'CNME_%': cnme,
-                'MDEF_%': mdef,
-                'TRR': trr,
-                'ETTP_%': ettp,
-                'MinClearance_m': min_c
-            })
-            
-    # Write to CSV
-    fields = ['PairID', 'Category', 'Model', 'Feasible', 'ISER_%', 'CNME_%', 'MDEF_%', 'TRR', 'ETTP_%', 'MinClearance_m']
-    with open(output_csv, 'w', newline='') as f:
-        writer = csv.DictWriter(f, fieldnames=fields)
-        writer.writeheader()
-        writer.writerows(records)
-        
-    print(f"\nExperiment complete. Data saved to {output_csv}")
-    
-    # Calculate Aggregate FSR and Conditional ETTP/TRR
-    print("\n" + "="*80)
-    print("FINAL AGGREGATE RESULTS")
-    print("="*80)
-    
-    print(f"{'Model':<25} | {'FSR %':<8} | {'Avg TRR':<10} | {'Avg ETTP %':<10} | {'Valid N'}")
-    print("-" * 75)
-    for model in models:
-        model_records = [r for r in records if r['Model'] == model]
-        feasible_records = [r for r in model_records if r['Feasible'] == 1]
-        
-        fsr = (len(feasible_records) / len(model_records)) * 100.0 if model_records else 0.0
-        
-        if feasible_records:
-            avg_trr = sum(r['TRR'] for r in feasible_records) / len(feasible_records)
-            avg_ettp = sum(r['ETTP_%'] for r in feasible_records) / len(feasible_records)
+def get_path_travel_time(path_edges):
+    return sum(_physics_travel_time(data) for _, _, _, data in path_edges or [])
+
+def evaluate_condition(graph_path, pairs, seed, drop_rate, scenarios, vehicle_values=None):
+    base = ox.load_graphml(graph_path)
+    observed, truth = synthetic_benchmark_graphs(base, drop_rate=drop_rate, seed=seed)
+    vehicle = VehicleDigitalTwin(**vehicle_values) if vehicle_values else benchmark_vehicle()
+    specs = model_specs()
+    prepared = {}
+    preparation_ms = {}
+    for name, config, policy, kind in specs:
+        profile = vehicle.model_copy(update={'unknown_data_policy': policy})
+        start = time.perf_counter()
+        if kind == 'search':
+            prepared[name] = prepare_search(observed, profile, config=config)
         else:
-            avg_trr, avg_ettp = 0.0, 0.0
-            
-        print(f"{model:<25} | {fsr:<8.1f} | {avg_trr:<10.2f} | +{avg_ettp:<9.2f} | N={len(feasible_records)}")
+            graph = truth if kind == 'oracle' else observed
+            prepared[name] = prepare_baseline(graph, profile, hard_constraints=kind in ('hard', 'oracle'))
+        preparation_ms[name] = (time.perf_counter()-start)*1000.
+    rows = []
+    for pair_id, (origin, dest, category) in enumerate(pairs, 1):
+        baseline_time = None
+        for name, config, policy, kind in specs:
+            graph = truth if kind == 'oracle' else observed
+            profile = vehicle.model_copy(update={'unknown_data_policy': policy})
+            diagnostic = {}
+            start = time.perf_counter()
+            try:
+                if kind == 'search':
+                    nodes, edges, stats = route_risk_aware(
+                        graph, origin, dest, profile, config=config,
+                        diagnostics=diagnostic, prepared=prepared[name])
+                else:
+                    nodes, edges, stats = route_baseline(
+                        graph, origin, dest, profile,
+                        hard_constraints=kind in ('hard', 'oracle'), prepared=prepared[name])
+                status = 'ok' if nodes is not None else 'no_route'
+            except RoutingSearchLimit:
+                nodes, edges, stats, status = None, None, {}, 'search_limit'
+            elapsed_ms = (time.perf_counter()-start)*1000.
+            duration = stats.get('travel_time_s')
+            if kind == 'eta':
+                baseline_time = duration
+            # Metrics are evaluated after timing search to avoid mixing MC runtime into routing.
+            metrics = MetricsEngine(profile).evaluate_route(
+                observed, nodes, edges, duration or 0., baseline_time or 0.,
+                truth_graph=truth, seed=seed*100000+pair_id, num_scenarios=scenarios)
+            safe_success = int(nodes is not None and metrics['PhysicalFailure'] == 0)
+            rows.append({
+                'Seed': seed, 'MissingRate': drop_rate, 'PairID': pair_id,
+                'Origin': origin, 'Destination': dest, 'Category': category,
+                'Model': name, 'Status': status, 'Feasible': int(nodes is not None),
+                'SafeSuccess': safe_success, 'TravelTime_s': duration,
+                'Runtime_ms': elapsed_ms, 'Preparation_ms': preparation_ms[name],
+                'ExpandedLabels': diagnostic.get('expanded_labels'),
+                'GeneratedLabels': diagnostic.get('generated_labels'),
+                'MaxLabelsPerNode': diagnostic.get('max_labels_per_node'),
+                'PathEdges': json.dumps([(u, v, k) for u, v, k, _ in edges]) if edges else None,
+                **metrics,
+            })
+    return rows
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="RoadFit-X: Run Validation Protocol Baselines")
-    parser.add_argument("--graph", type=str, required=True, help="Path to GraphML file")
-    parser.add_argument("--orig-node", type=int, required=False, help="Origin OSM Node ID")
-    parser.add_argument("--dest-node", type=int, required=False, help="Destination OSM Node ID")
-    parser.add_argument("--num-pairs", type=int, default=100, help="Number of random OD pairs to sample")
-    parser.add_argument("--output", type=str, default="results_100_od.csv", help="CSV output path")
-    args = parser.parse_args()
+def _interval(values, rng, samples=2000):
+    values = np.array(values, dtype=float)
+    if not len(values):
+        return None
+    means = values[rng.integers(0, len(values), size=(samples, len(values)))].mean(axis=1)
+    return [float(np.quantile(means, .025)), float(np.quantile(means, .975))]
 
-    print(f"Loading GraphML from {args.graph}...")
+def summarize(rows):
+    summaries, contrasts = [], []
+    rng = np.random.default_rng(271828)
+    models = [s[0] for s in model_specs()]
+    for rate in sorted({r['MissingRate'] for r in rows}):
+        for model in models:
+            group = [r for r in rows if r['MissingRate'] == rate and r['Model'] == model]
+            valid = [r for r in group if r['Feasible']]
+            summary = {'MissingRate': rate, 'Model': model, 'N': len(group),
+                       'Returned': len(valid), 'SearchLimits': sum(r['Status']=='search_limit' for r in group),
+                       'ReturnRate_%': len(valid)/len(group)*100.,
+                       'SafeSuccess_%': sum(r['SafeSuccess'] for r in group)/len(group)*100.,
+                       'ConditionalPhysicalFailure_%': sum(r['PhysicalFailure'] for r in valid)/len(valid)*100. if valid else None,
+                       'MedianRuntime_ms': float(np.median([r['Runtime_ms'] for r in group])),
+                       'P95Runtime_ms': float(np.quantile([r['Runtime_ms'] for r in group], .95))}
+            for metric in ('TRR', 'ETTP_%', 'MDEF_%', 'MinClearance_m'):
+                numbers = [r[metric] for r in valid if r[metric] is not None]
+                summary['Mean_'+metric] = float(np.mean(numbers)) if numbers else None
+            summaries.append(summary)
+        reference = {(r['Seed'], r['PairID']): r for r in rows
+                     if r['MissingRate']==rate and r['Model']=='RF Exact'}
+        for model in models:
+            matched = [(reference[r['Seed'], r['PairID']], r) for r in rows
+                       if r['MissingRate']==rate and r['Model']==model]
+            valid = [(a, b) for a, b in matched if a['Feasible'] and b['Feasible']]
+            # Cluster repeated realizations by fixed OD pair. Intervals are descriptive;
+            # one city's overlapping routes do not provide independent population data.
+            for metric, pairs in [('SafeSuccess', matched), ('TravelTime_s', valid),
+                                  ('TRR', valid), ('PhysicalFailure', valid)]:
+                by_od = {}
+                for a, b in pairs:
+                    if a[metric] is not None and b[metric] is not None:
+                        by_od.setdefault(a['PairID'], []).append(b[metric]-a[metric])
+                values = [sum(v)/len(v) for v in by_od.values()]
+                contrasts.append({
+                    'MissingRate': rate, 'Reference': 'RF Exact', 'Model': model,
+                    'Metric': metric, 'PairedN': sum(map(len, by_od.values())),
+                    'ODClusters': len(values), 'MeanDelta': float(np.mean(values)) if values else None,
+                    'Descriptive95Interval': _interval(values, rng),
+                })
+    return summaries, contrasts
+
+def _write_csv(path, rows):
+    if not rows:
+        raise ValueError('no experiment records')
+    with Path(path).open('w', encoding='utf-8', newline='') as stream:
+        writer = csv.DictWriter(stream, fieldnames=list(rows[0]))
+        writer.writeheader()
+        writer.writerows(rows)
+
+def run_experiment(G, vehicle, num_pairs, output_csv, seed=42):
+    # Compatibility entry point; callers should use the CLI for recorded multi-seed runs.
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        path = str(Path(directory)/'graph.graphml')
+        ox.save_graphml(G, path)
+        pairs = sample_stratified_od_pairs(G, int(.4*num_pairs), int(.4*num_pairs),
+                                           num_pairs-2*int(.4*num_pairs))
+        rows = evaluate_condition(path, pairs, seed, .3, 1000, vehicle.model_dump())
+    _write_csv(output_csv, rows)
+    return rows
+
+def run_all_ablations(G, vehicle, orig_node, dest_node):
+    import tempfile
+    with tempfile.TemporaryDirectory() as directory:
+        path = str(Path(directory)/'graph.graphml')
+        ox.save_graphml(G, path)
+        rows = evaluate_condition(path, [(orig_node, dest_node, 'specified')], 42, .3, 1000, vehicle.model_dump())
+    return {r['Model']: r for r in rows}
+
+def git_revision(root):
+    """Retain provenance when available; a source archive need not contain .git."""
     try:
-        G = ox.load_graphml(args.graph)
-    except Exception as e:
-        print(f"Error loading graph: {e}", file=sys.stderr)
-        sys.exit(1)
+        return subprocess.check_output(
+            ['git', 'rev-parse', 'HEAD'], cwd=root, text=True,
+            stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
 
-    # Instantiate Delivery Van
-    vehicle = VehicleDigitalTwin(
-        vehicle_type="delivery_van",
-        width_m=2.4,
-        height_m=2.6,
-        gross_weight_t=3.5,
-        axle_load_t=1.75,
-        wheelbase_m=3.0,
-        turning_radius_m=6.0,
-        ground_clearance_m=0.2,
-        max_grade_pct=15.0,
-        surface_tolerance=["asphalt", "concrete", "paved"],
-        rain_tolerance="medium",
-        cargo_class="standard",
-        risk_preference="moderate",
-        unknown_data_policy="conservative"
-    )
 
-    if args.orig_node and args.dest_node:
-        run_all_ablations(G, vehicle, args.orig_node, args.dest_node)
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--graph', required=True)
+    parser.add_argument('--num-pairs', type=int, default=100)
+    parser.add_argument('--output', default='experiments/reproducible/ablations.csv')
+    parser.add_argument('--seeds', type=int, nargs='+', default=[41, 42, 43])
+    parser.add_argument('--missing-rates', type=float, nargs='+', default=[0., .3, .6])
+    parser.add_argument('--scenarios', type=int, default=1000)
+    parser.add_argument('--workers', type=int, default=1)
+    parser.add_argument('--orig-node', type=int)
+    parser.add_argument('--dest-node', type=int)
+    args = parser.parse_args()
+    if args.num_pairs < 1 or args.scenarios < 1 or args.workers < 1:
+        parser.error('pairs, scenarios, and workers must be positive')
+    if any(not 0 <= rate <= 1 for rate in args.missing_rates):
+        parser.error('missing rates must lie in [0, 1]')
+    if any(seed < 0 for seed in args.seeds) or len(set(args.seeds)) != len(args.seeds):
+        parser.error('seeds must be unique nonnegative integers')
+    if len(set(args.missing_rates)) != len(args.missing_rates):
+        parser.error('missing rates must be unique')
+    if (args.orig_node is None) != (args.dest_node is None):
+        parser.error('provide both origin and destination')
+    graph_path = str(Path(args.graph).resolve())
+    graph = ox.load_graphml(graph_path)
+    if args.orig_node is not None:
+        if args.orig_node == args.dest_node or args.orig_node not in graph or args.dest_node not in graph:
+            parser.error('provide distinct existing node IDs')
+        pairs = [(args.orig_node, args.dest_node, 'specified')]
     else:
-        run_experiment(G, vehicle, args.num_pairs, args.output)
+        n = args.num_pairs
+        pairs = sample_stratified_od_pairs(graph, int(.4*n), int(.4*n), n-2*int(.4*n))
+    output = Path(args.output).resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    packages = {}
+    for name in ('networkx', 'numpy', 'osmnx', 'scipy', 'fastapi', 'pydantic', 'scikit-learn'):
+        packages[name] = importlib.metadata.version(name)
+    root = Path(__file__).resolve().parents[2]
+    code_hash = hashlib.sha256()
+    for file in sorted((root/'src').rglob('*.py')):
+        code_hash.update(str(file.relative_to(root)).encode())
+        code_hash.update(file.read_bytes())
+    manifest = {
+        'status': 'running', 'graph': graph_path,
+        'graph_sha256': hashlib.sha256(Path(graph_path).read_bytes()).hexdigest(),
+        'source_sha256': code_hash.hexdigest(),
+        'git_commit': git_revision(root),
+        'python': platform.python_version(), 'platform': platform.platform(),
+        'logical_cpus': os.cpu_count(), 'packages': packages,
+        'vehicle': benchmark_vehicle().model_dump(), 'seeds': args.seeds,
+        'missing_rates': args.missing_rates, 'od_seed': 104729, 'pairs': pairs,
+        'models': [{'name': name, 'config': asdict(config) if config else None, 'policy': policy, 'kind': kind}
+                   for name, config, policy, kind in model_specs()],
+        'scenarios': args.scenarios, 'workers': args.workers,
+        'data_basis': 'OSM topology; synthetic dimensions; evaluator-only synthetic truth',
+        'ci_basis': 'descriptive paired OD-cluster bootstrap; not population inference',
+    }
+    manifest_path = output.with_suffix('.manifest.json')
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    started = time.perf_counter()
+    all_rows = []
+    conditions = [(seed, rate) for seed in args.seeds for rate in args.missing_rates]
+    # Parallel CPU tasks are experiment workers, not agent delegation.
+    with ProcessPoolExecutor(max_workers=min(args.workers, len(conditions))) as executor:
+        futures = {executor.submit(evaluate_condition, graph_path, pairs, seed, rate, args.scenarios): (seed, rate)
+                   for seed, rate in conditions}
+        for future in as_completed(futures):
+            rows = future.result()  # Unexpected failures stop the run; never silently invent metrics.
+            all_rows.extend(rows)
+            seed, rate = futures[future]
+            print(f'Completed seed={seed}, missing={rate:.0%}: {len(rows)} records', flush=True)
+    all_rows.sort(key=lambda r: (r['Seed'], r['MissingRate'], r['PairID'], r['Model']))
+    _write_csv(output, all_rows)
+    summaries, contrasts = summarize(all_rows)
+    _write_csv(output.with_suffix('.summary.csv'), summaries)
+    output.with_suffix('.paired.json').write_text(json.dumps(contrasts, indent=2), encoding='utf-8')
+    manifest.update(status='complete', records=len(all_rows), duration_seconds=time.perf_counter()-started)
+    manifest_path.write_text(json.dumps(manifest, indent=2), encoding='utf-8')
+    print(f'Wrote {len(all_rows)} paired records to {output}; elapsed {manifest["duration_seconds"]:.1f}s', flush=True)
+
+if __name__ == '__main__':
+    main()

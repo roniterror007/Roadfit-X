@@ -2,7 +2,7 @@
   --primary: #6366f1;
   --primary-hover: #4f46e5;
   --bg-dark: #0f172a;
-  --panel-bg: rgba(15, 23, 42, 0.7);
+  --panel-bg: rgba(15, 23, 42, 0.96);
   --panel-border: rgba(255, 255, 255, 0.1);
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
@@ -33,7 +33,7 @@ body {
   position: absolute;
   top: 20px;
   left: 20px;
-  width: 400px;
+  width: min(400px, calc(100vw - 40px));
   max-height: calc(100vh - 40px);
   background: var(--panel-bg);
   backdrop-filter: blur(16px);
@@ -298,3 +298,20 @@ body {
 .sidebar {
   animation: slideIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
 }
+
+/* Driver and officer workspaces share the map and use distinct controls. */
+.view-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+.view-tabs button { flex: 1; border: 1px solid #334155; border-radius: 8px; padding: 10px; color: #cbd5e1; background: #1e293b; cursor: pointer; }
+.view-tabs button.active { background: #4f46e5; color: white; border-color: #6366f1; }
+.imagery-toggle { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #cbd5e1; margin: 10px 0; }
+.muted { color: #94a3b8; font-size: 12px; line-height: 1.6; margin: 8px 0 14px; }
+.traffic-console h2 { font-size: 22px; margin-top: 10px; }
+.traffic-console .form-group { margin-top: 16px; }
+.secondary-btn { width: 100%; color: #cbd5e1; background: #1e293b; border: 1px solid #475569; padding: 10px; border-radius: 8px; cursor: pointer; margin-top: 10px; }
+.secondary-btn:disabled { opacity: .5; cursor: wait; }
+.road-evidence { font-size: 12px; color: #cbd5e1; background: #172238; border: 1px solid #334155; border-radius: 8px; padding: 12px; line-height: 1.7; }
+.forecast-times { display: flex; gap: 12px; }
+.forecast-times > div { width: 50%; }
+.officer-summary { color: #a5b4fc; padding: 12px 0; font-size: 13px; }
+.scenario-label { font-size: 11px; color: #fbbf24; }
+.console-message { font-size: 12px; line-height: 1.6; color: #fde68a; margin-top: 12px; }

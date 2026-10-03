@@ -144,7 +144,7 @@ def evaluate_operational_risks(
     risks['rain_risk'] = min(rain_risk, 0.6)
 
     # 4. Traffic density risk
-    cars_per_km = get_car_density(edge_data)
+    cars_per_km = get_car_density(edge_data, traffic_level)
     traffic_risk = min(0.3, cars_per_km / 200.0)  # Max 30% risk from traffic
     risks['traffic_risk'] = traffic_risk
 

@@ -31,7 +31,9 @@ def predict_traversability(
     provenance: ProvenanceStore = None,
     edge_id: tuple = None,
     rain_level: str = 'none',
-    traffic_level: str = 'normal'
+    traffic_level: str = 'normal',
+    include_geometry: bool = True,
+    include_uncertainty: bool = True,
 ) -> Tuple[float, float]:
     """
     Returns (p_e, u_e):
@@ -41,21 +43,15 @@ def predict_traversability(
     """
     try:
         margins = compute_geometry_margins(edge_data, vehicle)
-    except Exception:
-        # If geometry parsing fails, treat as passable with high uncertainty
-        return 0.75, 0.9
+    except (TypeError, ValueError):
+        return 0.0, 1.0
 
     # ── 1. Hard physical blocks (length-independent, binary) ──
-    # Only treat as absolute block if margin is significantly negative (>10cm)
-    if margins.get('width_clearance_m') is not None and margins.get('width_clearance_m') < -0.10:
-        return 0.0, 0.0
-    if margins.get('height_clearance_m') is not None and margins.get('height_clearance_m') < -0.10:
-        return 0.0, 0.0
-    if margins.get('weight_margin_t') is not None and margins.get('weight_margin_t') < -1.0:
-        return 0.0, 0.0
+    if include_geometry and any(v is None or not math.isfinite(v) or v < 0 for v in margins.values()):
+        return 0.0, 1.0
 
     # ── 2. Compute spatial hazard rate (failures per meter) ──
-    length_m = max(float(edge_data.get('length', 50.0)), 1.0)
+    length_m = max(float(edge_data.get('length', 50.0)), 0.0)
 
     # Width squeeze hazard: inverse-square of lateral clearance
     # Tight clearance (0.1m) → 1e-3/m ≈ catastrophic over 1km
@@ -70,6 +66,8 @@ def predict_traversability(
     h_val = h_val if h_val is not None else 1.0
     h_clearance = max(h_val, 0.01)
     height_hazard_per_m = 1e-6 / (h_clearance ** 2)
+    if not include_geometry:
+        width_hazard_per_m = height_hazard_per_m = 0.0
 
     # ── 3. Operational hazard rate ──
     try:
@@ -85,10 +83,14 @@ def predict_traversability(
     p_e = math.exp(-total_hazard_per_m * length_m)
 
     # ── 5. Epistemic uncertainty — based on OSM tag completeness ──
-    has_width = edge_data.get('width') is not None
-    has_height = edge_data.get('maxheight') is not None
-    missing_count = (0 if has_width else 1) + (0 if has_height else 1)
-    u_e = 0.2 + 0.25 * missing_count  # 0.2 to 0.7
+    from src.vehicle.geometry_constraints import _parse_osm_float
+    missing_count = sum(
+        not math.isfinite(_parse_osm_float(edge_data.get(tag), math.nan,
+                         'weight' if tag == 'maxweight' else 'length'))
+        or edge_data.get(f'{tag}_source') == 'inferred'
+        for tag in ('width', 'maxheight', 'maxweight')
+    )
+    u_e = 0.1 + 0.3 * missing_count
 
     # Override with provenance if available
     if provenance and edge_id:
@@ -105,9 +107,19 @@ def predict_traversability(
     # multiplier) to preserve discretization invariance under Poisson composition.
     footprint_factor = (vehicle.width_m * vehicle.height_m) / 10.0
     uncertainty_hazard_per_m = u_e * min(footprint_factor, 0.8) * 1e-4
+    if not include_uncertainty:
+        uncertainty_hazard_per_m = 0.0
     total_hazard_per_m += uncertainty_hazard_per_m
 
     # Recompute p_e with the full hazard including uncertainty
     p_e = math.exp(-total_hazard_per_m * length_m)
+
+    # Search, CVaR, and route statistics share the same memory adjustment.
+    history = float(edge_data.get('_history_penalty', 0.0))
+    if not math.isfinite(history):
+        return 0.0, 1.0
+    history = min(max(history, 0.0), 1.0)
+    p_e *= 1.0 - history
+    u_e = max(u_e, history)
 
     return float(np.clip(p_e, 0.0, 1.0)), float(np.clip(u_e, 0.0, 1.0))

@@ -1,80 +1,67 @@
-import osmnx as ox
-import networkx as nx
+"""Seeded synthetic constraints with a separate evaluator-only truth graph."""
+from pathlib import Path
+import argparse
 import numpy as np
-import random
-import os
+import osmnx as ox
+from src.vehicle.geometry_constraints import WIDTH_PRIORS, highway_category
 
-def enrich_graph_widths(input_path: str, output_path: str, drop_rate: float = 0.3):
-    print(f"Loading GraphML from {input_path}...")
-    G = ox.load_graphml(input_path)
-    
-    # Statistical parameters for width generation
-    # format: (mean, std_dev, min_width)
-    hw_distributions = {
-        'primary': (8.0, 1.5, 6.0),
-        'primary_link': (8.0, 1.5, 6.0),
-        'secondary': (7.0, 1.2, 5.0),
-        'secondary_link': (7.0, 1.2, 5.0),
-        'tertiary': (6.0, 1.0, 4.0),
-        'tertiary_link': (6.0, 1.0, 4.0),
-        'trunk': (9.0, 1.5, 7.0),
-        'trunk_link': (9.0, 1.5, 7.0),
-        'residential': (3.5, 1.0, 2.0),
-        'living_street': (3.0, 0.8, 1.8),
-        'unclassified': (3.5, 1.0, 2.0)
-    }
-    
-    fallback_dist = (4.0, 1.0, 2.5)
-    
-    np.random.seed(42)
-    random.seed(42)
-    
-    total_edges = 0
-    enriched_edges = 0
-    dropped_edges = 0
-    
-    print("Enriching edges with statistical widths...")
-    for u, v, key, data in G.edges(keys=True, data=True):
-        total_edges += 1
-        
-        # If it already has a width, skip or overwrite?
-        # Since MDEF was 100%, we'll just overwrite/fill everything then drop some
-        hw = data.get('highway')
-        if isinstance(hw, list):
-            hw = hw[0]
-            
-        dist = hw_distributions.get(hw, fallback_dist)
-        
-        # Randomly decide if this edge will have a missing tag
-        if random.random() < drop_rate:
-            if 'width' in data:
-                del data['width']
-            dropped_edges += 1
-            continue
-            
-        # Generate synthetic width
-        synthetic_width = max(np.random.normal(dist[0], dist[1]), dist[2])
-        
-        # Add a tiny bit of noise to make it look realistic
-        synthetic_width = round(synthetic_width, 1)
-        
-        # Inject tag
-        data['width'] = str(synthetic_width)
-        enriched_edges += 1
-        
-    print(f"Total Edges: {total_edges}")
-    print(f"Enriched Edges (Simulated Data): {enriched_edges} ({(enriched_edges/total_edges)*100:.1f}%)")
-    print(f"Dropped Edges (Simulated Missing Data): {dropped_edges} ({(dropped_edges/total_edges)*100:.1f}%)")
-    
-    print(f"Saving enriched graph to {output_path}...")
-    ox.save_graphml(G, output_path)
-    print("Done!")
+def synthetic_benchmark_graphs(graph, drop_rate=.3, seed=42):
+    if not 0 <= drop_rate <= 1:
+        raise ValueError('drop_rate must be in [0, 1]')
+    observed, truth = graph.copy(), graph.copy()
+    rng = np.random.default_rng(seed)
+    roads = {}
+    for u, v, key, data in observed.edges(keys=True, data=True):
+        # Same OSM road in opposite directions shares latent geometry and missingness.
+        road = (tuple(sorted((str(u), str(v)))), str(data.get('osmid', key)))
+        if road not in roads:
+            mean, std = WIDTH_PRIORS.get(highway_category(data), (4., 1.))
+            width = round(max(.8, rng.normal(mean, std)), 3)
+            height = round(max(2., rng.normal(4.5, .4)), 3)
+            nominal_weight = 20. if highway_category(data) in ('motorway', 'trunk', 'primary') else 10.
+            maxweight = round(max(1., nominal_weight + rng.normal(0., 2.)), 3)
+            roads[road] = (width, height, maxweight, bool(rng.random() < drop_rate))
+        width, height, maxweight, hidden = roads[road]
+        for tag, value in [('width', width), ('maxheight', height), ('maxweight', maxweight)]:
+            truth[u][v][key][tag] = value
+            truth[u][v][key][f'{tag}_source'] = 'synthetic_truth'
+            data[tag] = value
+            data[f'{tag}_source'] = 'synthetic_observation'
+        # Width-only missingness isolates the effect of missing lateral constraints.
+        if hidden:
+            data.pop('width', None)
+            data['width_source'] = 'missing'
+        for attrs in (data, truth[u][v][key]):
+            # Remove legacy or hidden simulator state from the model inputs.
+            for name in list(attrs):
+                if name.startswith('_') or name.startswith('truth_'):
+                    attrs.pop(name)
+    for g, role in [(observed, 'observed'), (truth, 'evaluation_only')]:
+        g.graph.update(constraint_basis='synthetic', constraint_seed=seed,
+                       width_missing_rate=drop_rate, data_role=role)
+    return observed, truth
 
-if __name__ == "__main__":
-    in_path = "data/koramangala_enhanced.graphml"
-    out_path = "data/koramangala_enriched_v2.graphml"
-    
-    if not os.path.exists(in_path):
-        print(f"Error: {in_path} not found.")
-    else:
-        enrich_graph_widths(in_path, out_path, drop_rate=0.3)
+def enrich_graph_widths(input_path, output_path, drop_rate=.3, seed=42, truth_path=None):
+    graph = ox.load_graphml(input_path)
+    observed, truth = synthetic_benchmark_graphs(graph, drop_rate, seed)
+    output = Path(output_path)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    truth_file = Path(truth_path) if truth_path else output.with_name(output.stem + '_truth.graphml')
+    truth_file.parent.mkdir(parents=True, exist_ok=True)
+    ox.save_graphml(observed, output)
+    ox.save_graphml(truth, truth_file)
+    print(f'Synthetic observations: {output}; evaluator-only synthetic truth: {truth_file}')
+    return observed, truth
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--input', default='data/koramangala_enhanced.graphml')
+    parser.add_argument('--output', default='data/koramangala_synthetic_observed.graphml')
+    parser.add_argument('--truth')
+    parser.add_argument('--drop-rate', type=float, default=.3)
+    parser.add_argument('--seed', type=int, default=42)
+    args = parser.parse_args()
+    enrich_graph_widths(args.input, args.output, args.drop_rate, args.seed, args.truth)
+
+if __name__ == '__main__':
+    main()
