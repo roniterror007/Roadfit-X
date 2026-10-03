@@ -151,9 +151,9 @@ def test_downstream_spillback_reduces_service():
     ds_clear = {'occupancy': 5., 'storage': 100.}
     ds_full = {'occupancy': 100., 'storage': 100.}
     _, rate_clear = pq_ext(('e1',), 0, 0., 600., 0., control, {}, {}, {},
-                            downstream_state={('e1',): ds_clear})
+                            downstream_edge_state=ds_clear)
     _, rate_full = pq_ext(('e1',), 0, 0., 600., 0., control, {}, {}, {},
-                           downstream_state={('e1',): ds_full})
+                           downstream_edge_state=ds_full)
     assert rate_full < rate_clear * 0.1  # should be reduced to ~5%
 
 
